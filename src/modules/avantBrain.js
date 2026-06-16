@@ -564,3 +564,274 @@ export function detectTone(text) {
   if (/(simply|7th grade|explain|break it down|like i'm|eli5|simple)/i.test(lower)) return 'simple';
   return 'casual';
 }
+
+// ════════════════════════════════════════════════════════════
+// 🆕 ZERO-SIGNUP API FUNCTIONS — Added without changing anything above
+// ════════════════════════════════════════════════════════════
+
+import {
+  DUCKDUCKGO_BASE, HN_BASE, GUTENDEX_BASE,
+  CAT_API_BASE, DOG_API_BASE, USGS_BASE, OPEN_NOTIFY_BASE
+} from './config';
+
+// ─── DUCKDUCKGO — Instant answers, no key ──────────────────
+// Best for: quick facts, definitions, unit conversions, people
+export async function duckDuckGoSearch(query) {
+  try {
+    const res = await axios.get(`${DUCKDUCKGO_BASE}${encodeURIComponent(query)}`, { timeout: 8000 });
+    const d = res.data;
+    const parts = [];
+    if (d.Answer)           parts.push(`INSTANT: ${d.Answer}`);
+    if (d.AbstractText)     parts.push(`SUMMARY: ${d.AbstractText}`);
+    if (d.Definition)       parts.push(`DEFINITION: ${d.Definition}`);
+    if (d.AbstractSource)   parts.push(`Source: ${d.AbstractSource}`);
+    // Related topics for extra context
+    (d.RelatedTopics || []).slice(0, 3).forEach(t => {
+      if (t.Text) parts.push(`• ${t.Text}`);
+    });
+    return parts.length ? parts.join('\n') : null;
+  } catch (e) {
+    console.log('DuckDuckGo:', e.message);
+    return null;
+  }
+}
+
+// ─── HACKER NEWS — Tech news & trending dev stories ────────
+// Best for: latest tech, AI, startup, developer news
+export async function getHackerNews(limit = 8) {
+  try {
+    // Get top story IDs
+    const idsRes = await axios.get(`${HN_BASE}/topstories.json`, { timeout: 8000 });
+    const ids = (idsRes.data || []).slice(0, limit);
+    // Fetch each story in parallel
+    const stories = await Promise.all(
+      ids.map(id =>
+        axios.get(`${HN_BASE}/item/${id}.json`, { timeout: 6000 })
+          .then(r => r.data)
+          .catch(() => null)
+      )
+    );
+    return stories
+      .filter(s => s && s.title)
+      .map(s => `• [HN] ${s.title}${s.url ? ` — ${s.url}` : ''} (${s.score || 0} pts)`)
+      .join('\n');
+  } catch (e) {
+    console.log('Hacker News:', e.message);
+    return null;
+  }
+}
+
+export async function getHackerNewsNew(limit = 8) {
+  try {
+    const idsRes = await axios.get(`${HN_BASE}/newstories.json`, { timeout: 8000 });
+    const ids = (idsRes.data || []).slice(0, limit);
+    const stories = await Promise.all(
+      ids.map(id =>
+        axios.get(`${HN_BASE}/item/${id}.json`, { timeout: 6000 })
+          .then(r => r.data)
+          .catch(() => null)
+      )
+    );
+    return stories
+      .filter(s => s && s.title)
+      .map(s => `• [HN New] ${s.title}`)
+      .join('\n');
+  } catch (e) { return null; }
+}
+
+// ─── GUTENDEX — 70,000 free public domain books ────────────
+// Best for: classics, history books, literature, research
+export async function searchGutenberg(query, language = 'en') {
+  try {
+    const res = await axios.get(GUTENDEX_BASE, {
+      params: { search: query, languages: language },
+      timeout: 8000
+    });
+    const books = (res.data.results || []).slice(0, 5);
+    if (!books.length) return null;
+    return books.map(b => {
+      const authors = (b.authors || []).map(a => a.name).join(', ') || 'Unknown';
+      const downloads = b.download_count ? ` (${b.download_count.toLocaleString()} downloads)` : '';
+      const formats = Object.keys(b.formats || {});
+      const hasEpub = formats.some(f => f.includes('epub'));
+      return `📖 "${b.title}" by ${authors}${downloads}${hasEpub ? ' — Free EPUB available' : ''}`;
+    }).join('\n');
+  } catch (e) {
+    console.log('Gutenberg:', e.message);
+    return null;
+  }
+}
+
+export async function getGutenbergBook(bookId) {
+  try {
+    const res = await axios.get(`${GUTENDEX_BASE}/${bookId}`, { timeout: 8000 });
+    const b = res.data;
+    const authors = (b.authors || []).map(a => a.name).join(', ');
+    // Try to get text URL for reading
+    const textUrl = b.formats?.['text/html'] || b.formats?.['text/plain; charset=utf-8'] || null;
+    return { title: b.title, authors, textUrl, subjects: b.subjects?.slice(0, 3) };
+  } catch (e) { return null; }
+}
+
+// ─── ISS TRACKING — Live space station position ────────────
+// Best for: "Where is the ISS right now?" — updates every 5 sec
+export async function getISSPosition() {
+  try {
+    const [posRes, astroRes] = await Promise.all([
+      axios.get(`${OPEN_NOTIFY_BASE}/iss-now.json`, { timeout: 8000 }),
+      axios.get(`${OPEN_NOTIFY_BASE}/astros.json`, { timeout: 8000 })
+    ]);
+    const pos = posRes.data.iss_position;
+    const astronauts = astroRes.data.people?.filter(p => p.craft === 'ISS') || [];
+    return {
+      lat: parseFloat(pos.latitude).toFixed(4),
+      lon: parseFloat(pos.longitude).toFixed(4),
+      astronauts: astronauts.map(a => a.name),
+      count: astroRes.data.number,
+      timestamp: posRes.data.timestamp
+    };
+  } catch (e) {
+    console.log('ISS:', e.message);
+    return null;
+  }
+}
+
+export function formatISSForSpeech(iss) {
+  if (!iss) return "I can't reach the ISS tracker right now.";
+  const names = iss.astronauts.length
+    ? iss.astronauts.slice(0, 3).join(', ')
+    : 'unknown crew';
+  return `The ISS is currently flying over coordinates ${iss.lat}°N, ${iss.lon}°E. ` +
+    `There are ${iss.count} people in space right now — on the ISS: ${names}.`;
+}
+
+// ─── USGS EARTHQUAKES — Real-time seismic data ─────────────
+// Best for: "Any earthquakes today?" — updates every minute
+export async function getRecentEarthquakes({ minMag = 4.0, limit = 8, hours = 24 } = {}) {
+  try {
+    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const res = await axios.get(USGS_BASE, {
+      params: {
+        format:       'geojson',
+        starttime:    startTime,
+        minmagnitude: minMag,
+        limit,
+        orderby:      'magnitude'
+      },
+      timeout: 10000
+    });
+    const quakes = res.data.features || [];
+    if (!quakes.length) return `No earthquakes of magnitude ${minMag}+ in the last ${hours} hours.`;
+    return quakes.map(q => {
+      const p = q.properties;
+      const mag = p.mag?.toFixed(1);
+      const place = p.place || 'Unknown location';
+      const time = new Date(p.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const depth = (q.geometry?.coordinates?.[2] || 0).toFixed(0);
+      return `🌋 M${mag} — ${place} at ${time} (depth: ${depth}km)`;
+    }).join('\n');
+  } catch (e) {
+    console.log('USGS:', e.message);
+    return null;
+  }
+}
+
+export async function getEarthquakeStats() {
+  try {
+    // Get counts for different time windows
+    const [day, week, month] = await Promise.all([
+      axios.get(USGS_BASE, { params: { format: 'geojson', starttime: new Date(Date.now() - 86400000).toISOString(), minmagnitude: 2.5 }, timeout: 8000 }),
+      axios.get(USGS_BASE, { params: { format: 'geojson', starttime: new Date(Date.now() - 604800000).toISOString(), minmagnitude: 4.5 }, timeout: 8000 }),
+      axios.get(USGS_BASE, { params: { format: 'geojson', starttime: new Date(Date.now() - 2592000000).toISOString(), minmagnitude: 6.0 }, timeout: 8000 })
+    ]);
+    return {
+      last24h_m25: day.data.metadata?.count || 0,
+      last7d_m45:  week.data.metadata?.count || 0,
+      last30d_m60: month.data.metadata?.count || 0
+    };
+  } catch (e) { return null; }
+}
+
+// ─── FUN / PERSONALITY APIS — Cat & Dog ────────────────────
+// Used by AVANT for humor, engagement, casual moments
+export async function getRandomCat() {
+  try {
+    const res = await axios.get(`${CAT_API_BASE}?limit=1`, { timeout: 6000 });
+    return res.data?.[0]?.url || null;
+  } catch (e) { return null; }
+}
+
+export async function getRandomDog(breed = null) {
+  try {
+    const url = breed
+      ? `${DOG_API_BASE}/breed/${breed}/images/random`
+      : `${DOG_API_BASE}/breeds/image/random`;
+    const res = await axios.get(url, { timeout: 6000 });
+    return res.data?.message || null;
+  } catch (e) { return null; }
+}
+
+export async function getDogBreeds() {
+  try {
+    const res = await axios.get(`${DOG_API_BASE}/breeds/list/all`, { timeout: 6000 });
+    return Object.keys(res.data?.message || {});
+  } catch (e) { return []; }
+}
+
+// ════════════════════════════════════════════════════════════
+// 🧠 ENHANCED searchWeb — Now uses DuckDuckGo as a fallback
+//    Slotted in AFTER existing Wikipedia fallback
+//    (The existing searchWeb function is unchanged above)
+// ════════════════════════════════════════════════════════════
+
+// Augmented search: tries DuckDuckGo first (no key needed),
+// then feeds result into the existing cascade as extra context
+export async function searchWebFull(query) {
+  // Run DuckDuckGo and existing search in parallel for speed
+  const [ddgResult, existingResult] = await Promise.all([
+    duckDuckGoSearch(query),
+    searchWeb(query)  // existing function — unchanged
+  ]);
+
+  const parts = [];
+  if (ddgResult)    parts.push(ddgResult);
+  if (existingResult) parts.push(existingResult);
+  return parts.length ? parts.join('\n---\n') : null;
+}
+
+// ════════════════════════════════════════════════════════════
+// 🎯 INTENT ROUTING — Maps new intents to new API functions
+// ════════════════════════════════════════════════════════════
+
+// Call this after detectVisualIntent for extended intent types
+export function detectExtendedIntent(text) {
+  const lower = text.toLowerCase();
+
+  if (/(earthquake|seismic|tremor|quake|fault line)/i.test(lower))
+    return { type: 'earthquake', target: lower };
+
+  if (/(iss|space station|astronaut|in space)/i.test(lower))
+    return { type: 'iss', target: 'iss' };
+
+  if (/(hacker news|tech news|developer news|startup news|hn top)/i.test(lower))
+    return { type: 'hackernews', target: lower };
+
+  if (/(gutenberg|public domain|free book|classic book|project gutenberg)/i.test(lower)) {
+    const match = lower.match(/(?:find|search|get)(?: book)? (.+)/);
+    return { type: 'gutenberg', target: match?.[1] || lower };
+  }
+
+  if (/(show.*cat|random cat|cat pic|kitty)/i.test(lower))
+    return { type: 'cat', target: 'cat' };
+
+  if (/(show.*dog|random dog|dog pic|puppy)/i.test(lower))
+    return { type: 'dog', target: 'dog' };
+
+  if (/(bitcoin|ethereum|crypto|btc|eth|solana|dogecoin|price of)/i.test(lower)) {
+    const coinMap = { bitcoin: 'bitcoin', btc: 'bitcoin', ethereum: 'ethereum', eth: 'ethereum', solana: 'solana', dogecoin: 'dogecoin', doge: 'dogecoin' };
+    const found = Object.keys(coinMap).find(k => lower.includes(k));
+    return { type: 'crypto', target: coinMap[found] || 'bitcoin' };
+  }
+
+  return null;
+}
