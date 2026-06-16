@@ -10,7 +10,11 @@ import {
 } from 'react-native';
 import * as Speech from 'expo-speech';
 import { LinearGradient } from 'expo-linear-gradient';
-import { think, searchWeb, searchImages, detectVisualIntent } from '../modules/avantBrain';
+import {
+  think, searchWeb, searchWebFull, searchImages, detectVisualIntent, detectExtendedIntent,
+  getISSPosition, formatISSForSpeech, getRecentEarthquakes, getHackerNews,
+  searchGutenberg, getRandomCat, getRandomDog, getCryptoPrice, detectTone as detectToneBrain
+} from '../modules/avantBrain';
 import { getCalendarEvents, formatEventsForSpeech, getCurrentLocation, getWeather } from '../modules/phoneSync';
 import { getPlanetFromText, PLANETS } from '../modules/solarSystem';
 import { OWNER_NAME, VOICE_PITCH, VOICE_RATE } from '../modules/config';
@@ -125,14 +129,35 @@ export default function HomeScreen({ navigation }) {
     setDisplayMode(DISPLAY_MODES.THINKING);
     startScanAnim();
 
-    // Detect visual intent
-    const visual = detectVisualIntent(text);
+    // Detect visual + extended intent
+    const visual   = detectVisualIntent(text);
+    const extended = detectExtendedIntent(text);
 
-    // Get web data if needed
+    // Run enriched web search in parallel with zero-signup APIs
     let context = '';
     if (text.length > 3) {
-      const webData = await searchWeb(text);
+      const webData = await searchWebFull(text);  // DuckDuckGo + existing cascade
       if (webData) context = webData;
+    }
+
+    // Handle zero-signup API intents FIRST (instant, no key needed)
+    const extResult = await handleExtendedIntent(extended, text);
+    if (extResult) {
+      // Feed real data into AI for a spoken + visual response
+      const enrichedContext = extResult.data
+        ? (context ? context + '\n' + extResult.data : extResult.data)
+        : context;
+      const reply = await think(text, detectTone(text), enrichedContext);
+      setResponse(reply);
+      if (extResult.imageUrl) {
+        setHoloImages([{ url: extResult.imageUrl, title: extResult.label || text }]);
+        setDisplayMode(DISPLAY_MODES.IMAGE);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+      } else {
+        setDisplayMode(DISPLAY_MODES.SPEAKING);
+      }
+      speakResponse(reply);
+      return;
     }
 
     // Get AVANT's response
@@ -147,12 +172,49 @@ export default function HomeScreen({ navigation }) {
     speakResponse(reply);
   }
 
-  function detectTone(text) {
-    const lower = text.toLowerCase();
-    if (lower.includes('urgent') || lower.includes('emergency') || lower.includes('asap')) return 'urgent';
-    if (lower.includes('serious') || lower.includes('important')) return 'serious';
-    if (lower.includes('simply') || lower.includes('explain') || lower.includes('7th grade')) return 'simple';
-    return 'casual';
+  // detectTone is imported from avantBrain (detectToneBrain) for consistency
+
+  // ── HANDLE ZERO-SIGNUP API INTENTS ─────────────────────
+  async function handleExtendedIntent(extended, originalText) {
+    if (!extended) return null;
+
+    switch (extended.type) {
+      case 'earthquake': {
+        const data = await getRecentEarthquakes({ minMag: 4.0, limit: 8, hours: 24 });
+        return { data, label: 'Recent Earthquakes', imageUrl: null };
+      }
+      case 'iss': {
+        const iss = await getISSPosition();
+        const data = formatISSForSpeech(iss);
+        // Show ISS on map if we got coords
+        if (iss) {
+          navigation.navigate('Map', { destination: `${iss.lat},${iss.lon}`, label: 'ISS Location' });
+        }
+        return { data, label: 'ISS Tracker', imageUrl: null };
+      }
+      case 'hackernews': {
+        const data = await getHackerNews(6);
+        return { data, label: 'Hacker News Top Stories', imageUrl: null };
+      }
+      case 'gutenberg': {
+        const data = await searchGutenberg(extended.target);
+        return { data, label: 'Project Gutenberg Books', imageUrl: null };
+      }
+      case 'cat': {
+        const imageUrl = await getRandomCat();
+        return { data: 'Here is a random cat for you!', label: 'Random Cat', imageUrl };
+      }
+      case 'dog': {
+        const imageUrl = await getRandomDog();
+        return { data: 'Woof! Here is a random dog!', label: 'Random Dog', imageUrl };
+      }
+      case 'crypto': {
+        const data = await getCryptoPrice(extended.target);
+        return { data, label: extended.target, imageUrl: null };
+      }
+      default:
+        return null;
+    }
   }
 
   async function handleVisualDisplay(visual, originalText) {
