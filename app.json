@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "AVANT",
+    "slug": "avant-ai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./src/assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050510"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/icon.png",
+        "backgroundColor": "#050510"
+      },
+      "package": "com.bridgeline.avant",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.READ_CONTACTS",
+        "android.permission.READ_CALL_LOG",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-av",
+      "expo-contacts",
+      "expo-calendar",
+      "expo-location",
+      "expo-notifications",
+      [
+        "expo-speech",
+        { "useMicrophone": true }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "avant-bridgeline-001"
+      }
+    }
+  }
+}
