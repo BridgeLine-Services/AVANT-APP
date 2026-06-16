@@ -1,0 +1,80 @@
+# ============================================================
+# AVANT — AmaVanta: A New Teammate
+# Requirements — Run: pip install -r requirements.txt
+# ALL CORE FEATURES WORK WITH FREE APIs — NO CREDIT CARD
+# ============================================================
+
+# ── BRAIN: LLM Intelligence ──────────────────────────────────
+openai>=1.30.0                  # GPT-4o (your key — most powerful)
+groq>=0.9.0                     # Groq Llama3-70b (FREE — fastest on earth)
+google-generativeai>=0.8.0      # Gemini 2.0 Flash (FREE — 1500 req/day)
+
+# ── SEARCH: Live Internet Data ───────────────────────────────
+requests>=2.31.0                # HTTP client for all APIs
+serpapi>=0.1.5                  # SerpApi — Google Search/Maps/News/+40 APIs
+google-search-results>=2.4.2    # SerpApi Python SDK
+
+# ── VOICE OUTPUT: Text-to-Speech ─────────────────────────────
+edge-tts>=6.1.9                 # Microsoft Edge Neural TTS (FREE, no key)
+pygame>=2.5.0                   # Audio playback
+pyttsx3>=2.90                   # Offline TTS fallback
+
+# ── VOICE INPUT: Speech Recognition ──────────────────────────
+pyaudio>=0.2.14                 # Microphone input
+openai-whisper>=20231117        # Offline speech-to-text (local, no API)
+sounddevice>=0.4.6              # Audio device management
+scipy>=1.11.0                   # Audio processing
+numpy>=1.24.0                   # Numerical processing
+
+# ── WAKE WORD: openWakeWord (FREE, no API key) ────────────────
+openwakeword>=0.6.0             # Custom wake word detection
+onnxruntime>=1.16.0             # Neural model inference
+
+# ── SPEAKER VERIFICATION: Voice Lock ─────────────────────────
+speechbrain>=1.0.0              # ECAPA-TDNN voice fingerprinting
+torch>=2.0.0                    # PyTorch (SpeechBrain dependency)
+torchaudio>=2.0.0               # Audio transforms
+
+# ── TONE DETECTION: Mood/Urgency Reading ─────────────────────
+librosa>=0.10.0                 # Audio feature extraction (pitch, energy)
+
+# ── NAVIGATION: Maps + Directions ────────────────────────────
+# Uses SerpApi Google Maps Directions API (key above)
+# Fallback: OpenStreetMap Nominatim (no key needed, built into requests)
+
+# ── WEATHER: Live Global Data ─────────────────────────────────
+# Primary: Open-Meteo (no key needed — built into requests)
+# Backup: OpenWeatherMap (free key)
+
+# ── CALENDAR: Google Calendar ────────────────────────────────
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.2.0
+google-api-python-client>=2.100.0
+
+# ── BLUETOOTH: Auto Device Connect ───────────────────────────
+bleak>=0.21.0                   # Cross-platform Bluetooth (BLE)
+
+# ── PHONE GUARDIAN: Proximity + Backup ───────────────────────
+PyGithub>=2.1.0                 # GitHub API for emergency backup
+
+# ── REMINDERS & ALARMS ───────────────────────────────────────
+schedule>=1.2.0                 # Task scheduling
+APScheduler>=3.10.0             # Advanced scheduler
+
+# ── APP SYNC ─────────────────────────────────────────────────
+watchdog>=3.0.0                 # File system monitoring
+
+# ── UTILITIES ────────────────────────────────────────────────
+python-dotenv>=1.0.0            # .env file loading
+loguru>=0.7.0                   # Logging
+rich>=13.0.0                    # Beautiful terminal output
+click>=8.1.0                    # CLI argument parsing
+httpx>=0.25.0                   # Async HTTP
+aiofiles>=23.0.0                # Async file I/O
+python-dateutil>=2.8.0          # Date parsing ("next Monday at 9am")
+pytz>=2023.3                    # Timezone handling
+
+# ── ANDROID/TERMUX SPECIFIC (install separately on Termux) ───
+# pkg install python ffmpeg mpg123 portaudio clang
+# pip install pyaudio edge-tts groq openai
