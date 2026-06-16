@@ -11,9 +11,17 @@ import {
 import * as Speech from 'expo-speech';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  think, searchWeb, searchWebFull, searchImages, detectVisualIntent, detectExtendedIntent,
-  getISSPosition, formatISSForSpeech, getRecentEarthquakes, getHackerNews,
-  searchGutenberg, getRandomCat, getRandomDog, getCryptoPrice, detectTone as detectToneBrain
+  think, searchWeb, searchWebFull, searchImages,
+  detectVisualIntent, detectAllIntents,
+  getISSPosition, formatISSForSpeech,
+  getRecentEarthquakes, getHackerNews,
+  searchGutenberg, getRandomCat, getRandomDog, getCryptoPrice,
+  searchArxiv, searchCrossref, searchOpenAlex, searchEuropePMC,
+  getWikidataFact, searxngSearch,
+  searchTVShow, getTVSchedule,
+  searchAnime, searchManga,
+  getPokemon, formatPokemonForSpeech,
+  detectTone as detectToneBrain
 } from '../modules/avantBrain';
 import { getCalendarEvents, formatEventsForSpeech, getCurrentLocation, getWeather } from '../modules/phoneSync';
 import { getPlanetFromText, PLANETS } from '../modules/solarSystem';
@@ -131,7 +139,7 @@ export default function HomeScreen({ navigation }) {
 
     // Detect visual + extended intent
     const visual   = detectVisualIntent(text);
-    const extended = detectExtendedIntent(text);
+    const extended = detectAllIntents(text);  // covers all zero-signup APIs
 
     // Run enriched web search in parallel with zero-signup APIs
     let context = '';
@@ -211,6 +219,46 @@ export default function HomeScreen({ navigation }) {
       case 'crypto': {
         const data = await getCryptoPrice(extended.target);
         return { data, label: extended.target, imageUrl: null };
+      }
+      // ── Research & Academic ─────────────────────────────
+      case 'arxiv': {
+        const data = await searchArxiv(extended.target, 4);
+        return { data, label: 'arXiv Research Papers', imageUrl: null };
+      }
+      case 'europepmc': {
+        const data = await searchEuropePMC(extended.target, 4);
+        return { data, label: 'Medical Research', imageUrl: null };
+      }
+      case 'wikidata': {
+        const data = await getWikidataFact(extended.target);
+        return { data, label: 'Wikidata Facts', imageUrl: null };
+      }
+      case 'crossref': {
+        const data = await searchCrossref(extended.target, 4);
+        return { data, label: 'Scientific Publications', imageUrl: null };
+      }
+      case 'openalex': {
+        const data = await searchOpenAlex(extended.target, 4);
+        return { data, label: 'Academic Papers', imageUrl: null };
+      }
+      // ── Entertainment ───────────────────────────────────
+      case 'tvshow': {
+        const data = await searchTVShow(extended.target);
+        return { data, label: 'TV Shows', imageUrl: null };
+      }
+      case 'tvschedule': {
+        const data = await getTVSchedule();
+        return { data, label: "Tonight's TV Schedule", imageUrl: null };
+      }
+      case 'anime': {
+        const data = await searchAnime(extended.target);
+        return { data, label: 'Anime', imageUrl: null };
+      }
+      // ── Pokémon ─────────────────────────────────────────
+      case 'pokemon': {
+        const poke = await getPokemon(extended.target);
+        const data = formatPokemonForSpeech(poke);
+        return { data, label: poke?.name || 'Pokémon', imageUrl: poke?.sprite || null };
       }
       default:
         return null;
