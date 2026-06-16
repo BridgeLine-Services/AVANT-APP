@@ -11,15 +11,28 @@
 
 import axios from 'axios';
 import {
+  // AI keys (optional — cascade skips unset ones)
   GROQ_API_KEY, CEREBRAS_API_KEY, DEEPSEEK_API_KEY,
   GEMINI_API_KEY, MISTRAL_API_KEY, TOGETHER_API_KEY,
-  OPENAI_API_KEY, SERPAPI_KEY, SERPER_API_KEY,
-  TMDB_API_KEY, UNSPLASH_KEY, OWNER_NAME,
-  NASA_IMAGES_BASE, REST_COUNTRIES_BASE, COINGECKO_BASE,
-  WIKIPEDIA_BASE, DICTIONARY_BASE, QUOTABLE_BASE,
-  OPEN_METEO_BASE, CURRENTS_API_KEY, GNEWS_API_KEY,
+  OPENAI_API_KEY,
+  // Keyed search (optional — SearXNG + DDG work without)
+  SERPAPI_KEY, SERPER_API_KEY,
+  // Keyed media/news/finance (optional)
+  TMDB_API_KEY, UNSPLASH_KEY, CURRENTS_API_KEY, GNEWS_API_KEY,
   NEWSAPI_KEY, AVIATIONSTACK_KEY, EXCHANGERATE_KEY,
-  NOMINATIM_BASE, OPEN_LIBRARY_BASE
+  // ✅ Zero-signup constants — always available
+  OWNER_NAME,
+  OPEN_METEO_BASE, NASA_IMAGES_BASE,
+  REST_COUNTRIES_BASE, COINGECKO_BASE,
+  WIKIPEDIA_BASE, DICTIONARY_BASE, QUOTABLE_BASE,
+  NOMINATIM_BASE, OPEN_LIBRARY_BASE,
+  DUCKDUCKGO_BASE, HN_BASE, GUTENDEX_BASE,
+  CAT_API_BASE, DOG_API_BASE, USGS_BASE, OPEN_NOTIFY_BASE,
+  // ✅ New zero-signup additions
+  SEARXNG_INSTANCES, SEARXNG_BASE,
+  WIKIDATA_BASE, ARXIV_BASE, CROSSREF_BASE,
+  OPENALEX_BASE, EUROPE_PMC_BASE,
+  TVMAZE_BASE, JIKAN_BASE, POKEAPI_BASE
 } from './config';
 
 // ─── AVANT PERSONA ─────────────────────────────────────────
@@ -205,7 +218,28 @@ export async function searchWeb(query) {
     } catch (e) { console.log('Serper search:', e.message); }
   }
 
-  // Wikipedia fallback (always free, no key)
+  // ── SearXNG — meta-search, NO key needed (tries 3 instances)
+  for (const instance of SEARXNG_INSTANCES) {
+    try {
+      const res = await axios.get(`${instance}${encodeURIComponent(query)}`, {
+        headers: { 'User-Agent': 'AVANT-AI/1.0' },
+        timeout: 8000
+      });
+      const results = res.data?.results || [];
+      if (results.length) {
+        const parts = results.slice(0, 6).map(r =>
+          `[${r.title}]: ${r.content || r.url}`
+        );
+        return parts.join('\n');
+      }
+    } catch (e) { /* try next instance */ }
+  }
+
+  // ── DuckDuckGo Instant Answer — NO key needed
+  const ddg = await duckDuckGoSearch(query);
+  if (ddg) return ddg;
+
+  // ── Wikipedia — final fallback, always free
   return await searchWikipedia(query);
 }
 
@@ -569,10 +603,7 @@ export function detectTone(text) {
 // 🆕 ZERO-SIGNUP API FUNCTIONS — Added without changing anything above
 // ════════════════════════════════════════════════════════════
 
-import {
-  DUCKDUCKGO_BASE, HN_BASE, GUTENDEX_BASE,
-  CAT_API_BASE, DOG_API_BASE, USGS_BASE, OPEN_NOTIFY_BASE
-} from './config';
+// ✅ All imports moved to top of file
 
 // ─── DUCKDUCKGO — Instant answers, no key ──────────────────
 // Best for: quick facts, definitions, unit conversions, people
@@ -830,6 +861,369 @@ export function detectExtendedIntent(text) {
   if (/(bitcoin|ethereum|crypto|btc|eth|solana|dogecoin|price of)/i.test(lower)) {
     const coinMap = { bitcoin: 'bitcoin', btc: 'bitcoin', ethereum: 'ethereum', eth: 'ethereum', solana: 'solana', dogecoin: 'dogecoin', doge: 'dogecoin' };
     const found = Object.keys(coinMap).find(k => lower.includes(k));
+    return { type: 'crypto', target: coinMap[found] || 'bitcoin' };
+  }
+
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════
+// 🆕 NEW ZERO-SIGNUP APIS — All work with no key, no account
+// ════════════════════════════════════════════════════════════
+
+// ─── SEARXNG — Open-source meta search (primary free search) ─
+// Aggregates Google + Bing + DDG + Wikipedia — no key needed
+export async function searxngSearch(query) {
+  for (const instance of SEARXNG_INSTANCES) {
+    try {
+      const res = await axios.get(`${instance}${encodeURIComponent(query)}`, {
+        headers: { 'User-Agent': 'AVANT-AI/1.0' },
+        timeout: 8000
+      });
+      const results = res.data?.results || [];
+      if (results.length) {
+        return results.slice(0, 6).map(r =>
+          `[${r.title}]: ${r.content || r.url}`
+        ).join('\n');
+      }
+    } catch (e) { console.log(`SearXNG (${instance}):`, e.message); }
+  }
+  return null;
+}
+
+// ─── WIKIDATA SPARQL — Structured world knowledge ────────────
+// Answers factual questions: tallest peaks, Nobel winners, etc.
+export async function queryWikidata(sparqlQuery) {
+  try {
+    const res = await axios.get(WIKIDATA_BASE, {
+      params: { query: sparqlQuery, format: 'json' },
+      headers: {
+        'Accept': 'application/sparql-results+json',
+        'User-Agent': 'AVANT-AI/1.0'
+      },
+      timeout: 10000
+    });
+    const bindings = res.data?.results?.bindings || [];
+    return bindings;
+  } catch (e) {
+    console.log('Wikidata:', e.message);
+    return null;
+  }
+}
+
+// Pre-built Wikidata queries for common AVANT requests
+export async function getWikidataFact(topic) {
+  const lower = topic.toLowerCase();
+  let sparql = null;
+
+  if (/tallest|highest mountain/i.test(lower)) {
+    sparql = `SELECT ?name ?elevation WHERE {
+      ?item wdt:P31 wd:Q8502; wdt:P2044 ?elevation; rdfs:label ?name.
+      FILTER(LANG(?name) = "en") } ORDER BY DESC(?elevation) LIMIT 10`;
+  } else if (/richest countr|wealthiest/i.test(lower)) {
+    sparql = `SELECT ?name ?gdp WHERE {
+      ?item wdt:P31 wd:Q6256; wdt:P2131 ?gdp; rdfs:label ?name.
+      FILTER(LANG(?name) = "en") } ORDER BY DESC(?gdp) LIMIT 10`;
+  } else if (/nobel/i.test(lower)) {
+    sparql = `SELECT ?name ?year ?field WHERE {
+      ?item wdt:P31 wd:Q19020; wdt:P585 ?year; wdt:P1027 ?award; rdfs:label ?name.
+      ?award rdfs:label ?field.
+      FILTER(LANG(?name) = "en" && LANG(?field) = "en")
+    } ORDER BY DESC(?year) LIMIT 10`;
+  } else if (/population|most populated/i.test(lower)) {
+    sparql = `SELECT ?name ?pop WHERE {
+      ?item wdt:P31 wd:Q6256; wdt:P1082 ?pop; rdfs:label ?name.
+      FILTER(LANG(?name) = "en") } ORDER BY DESC(?pop) LIMIT 10`;
+  }
+
+  if (!sparql) return null;
+  const results = await queryWikidata(sparql);
+  if (!results?.length) return null;
+  return results.slice(0, 8).map((r, i) => {
+    const vals = Object.values(r).map(v => v.value).join(' — ');
+    return `${i + 1}. ${vals}`;
+  }).join('\n');
+}
+
+// ─── arXiv — Research papers (AI, physics, math, CS) ─────────
+// Perfect for: "latest AI research", "papers about X"
+export async function searchArxiv(query, maxResults = 5) {
+  try {
+    const res = await axios.get(ARXIV_BASE, {
+      params: {
+        search_query: `all:${query}`,
+        start: 0,
+        max_results: maxResults,
+        sortBy: 'submittedDate',
+        sortOrder: 'descending'
+      },
+      timeout: 10000
+    });
+    // arXiv returns Atom XML — parse it simply
+    const xml = res.data;
+    const entries = xml.match(/<entry>([\s\S]*?)<\/entry>/g) || [];
+    return entries.slice(0, maxResults).map(entry => {
+      const title   = (entry.match(/<title>([\s\S]*?)<\/title>/) || [])[1]?.replace(/\s+/g, ' ').trim() || 'Unknown';
+      const summary = (entry.match(/<summary>([\s\S]*?)<\/summary>/) || [])[1]?.replace(/\s+/g, ' ').trim().slice(0, 120) || '';
+      const authors = (entry.match(/<name>(.*?)<\/name>/g) || []).slice(0, 2).map(n => n.replace(/<\/?name>/g, '')).join(', ');
+      return `📄 "${title}" — ${authors}\n   ${summary}...`;
+    }).join('\n\n') || null;
+  } catch (e) {
+    console.log('arXiv:', e.message);
+    return null;
+  }
+}
+
+// ─── Crossref — Scientific publications ──────────────────────
+// Best for: academic citations, journal papers, DOI lookup
+export async function searchCrossref(query, rows = 5) {
+  try {
+    const res = await axios.get(`${CROSSREF_BASE}/works`, {
+      params: { query, rows, sort: 'relevance', select: 'title,author,published,DOI,type' },
+      headers: { 'User-Agent': 'AVANT-AI/1.0 (mailto:avant@avant.ai)' },
+      timeout: 10000
+    });
+    const items = res.data?.message?.items || [];
+    return items.slice(0, rows).map(item => {
+      const title  = (item.title || ['Unknown'])[0];
+      const year   = item.published?.['date-parts']?.[0]?.[0] || 'N/A';
+      const author = (item.author || []).slice(0, 2).map(a => `${a.given || ''} ${a.family || ''}`.trim()).join(', ');
+      return `📚 "${title}" (${year}) — ${author || 'Unknown'}`;
+    }).join('\n') || null;
+  } catch (e) {
+    console.log('Crossref:', e.message);
+    return null;
+  }
+}
+
+// ─── OpenAlex — Academic knowledge graph ─────────────────────
+// Millions of papers, authors, institutions — no key needed
+export async function searchOpenAlex(query, perPage = 5) {
+  try {
+    const res = await axios.get(`${OPENALEX_BASE}/works`, {
+      params: { search: query, per_page: perPage, sort: 'relevance_score:desc', select: 'title,authorships,publication_year,open_access' },
+      headers: { 'User-Agent': 'AVANT-AI/1.0' },
+      timeout: 10000
+    });
+    const results = res.data?.results || [];
+    return results.map(r => {
+      const authors = (r.authorships || []).slice(0, 2).map(a => a.author?.display_name).join(', ');
+      const oa = r.open_access?.is_oa ? '🔓 Open Access' : '🔒';
+      return `${oa} "${r.title}" (${r.publication_year}) — ${authors || 'Unknown'}`;
+    }).join('\n') || null;
+  } catch (e) {
+    console.log('OpenAlex:', e.message);
+    return null;
+  }
+}
+
+// ─── Europe PMC — Medical & life science research ─────────────
+// Best for: drug information, medical conditions, biology
+export async function searchEuropePMC(query, pageSize = 5) {
+  try {
+    const res = await axios.get(`${EUROPE_PMC_BASE}/search`, {
+      params: { query, format: 'json', pageSize, sort: 'FIRST_PDATE desc' },
+      timeout: 10000
+    });
+    const articles = res.data?.resultList?.result || [];
+    return articles.slice(0, pageSize).map(a => {
+      const journal = a.journalTitle || a.source || 'Unknown Journal';
+      const year    = a.pubYear || 'N/A';
+      return `🏥 "${a.title}" — ${journal} (${year})`;
+    }).join('\n') || null;
+  } catch (e) {
+    console.log('EuropePMC:', e.message);
+    return null;
+  }
+}
+
+// ─── TVMaze — TV show data, schedules, episodes ───────────────
+// Best for: "What's on TV tonight?", "Tell me about Breaking Bad"
+export async function searchTVShow(query) {
+  try {
+    const res = await axios.get(`${TVMAZE_BASE}/search/shows`, {
+      params: { q: query },
+      timeout: 8000
+    });
+    const shows = res.data || [];
+    return shows.slice(0, 4).map(({ show: s }) => {
+      const status  = s.status || 'Unknown';
+      const rating  = s.rating?.average ? `⭐${s.rating.average}` : '';
+      const network = s.network?.name || s.webChannel?.name || 'Unknown';
+      const genres  = (s.genres || []).slice(0, 3).join(', ');
+      const summary = (s.summary || '').replace(/<[^>]+>/g, '').slice(0, 80);
+      return `📺 "${s.name}" (${status}) — ${network} ${rating}\n   ${genres}\n   ${summary}...`;
+    }).join('\n\n') || null;
+  } catch (e) {
+    console.log('TVMaze:', e.message);
+    return null;
+  }
+}
+
+export async function getTVSchedule(date = null, country = 'US') {
+  try {
+    const d = date || new Date().toISOString().slice(0, 10);
+    const res = await axios.get(`${TVMAZE_BASE}/schedule`, {
+      params: { country, date: d },
+      timeout: 8000
+    });
+    const shows = (res.data || []).slice(0, 8);
+    return shows.map(ep => {
+      const time    = ep.airtime || 'TBD';
+      const network = ep.show?.network?.name || ep.show?.webChannel?.name || 'Unknown';
+      return `🕐 ${time} — ${ep.show?.name} (${network})`;
+    }).join('\n') || null;
+  } catch (e) {
+    console.log('TVMaze schedule:', e.message);
+    return null;
+  }
+}
+
+// ─── Jikan — Anime & manga (MyAnimeList data) ─────────────────
+// Best for: "What's a good anime?", "Tell me about One Piece"
+export async function searchAnime(query) {
+  try {
+    const res = await axios.get(`${JIKAN_BASE}/anime`, {
+      params: { q: query, limit: 5, order_by: 'score', sort: 'desc' },
+      timeout: 8000
+    });
+    const results = res.data?.data || [];
+    return results.slice(0, 4).map(a => {
+      const score   = a.score ? `⭐${a.score}` : '';
+      const episodes = a.episodes ? `${a.episodes} eps` : 'Ongoing';
+      const genres  = (a.genres || []).slice(0, 3).map(g => g.name).join(', ');
+      const synopsis = (a.synopsis || '').slice(0, 100);
+      return `🎌 "${a.title}" ${score} — ${episodes}\n   ${genres}\n   ${synopsis}...`;
+    }).join('\n\n') || null;
+  } catch (e) {
+    console.log('Jikan:', e.message);
+    return null;
+  }
+}
+
+export async function searchManga(query) {
+  try {
+    const res = await axios.get(`${JIKAN_BASE}/manga`, {
+      params: { q: query, limit: 5, order_by: 'score', sort: 'desc' },
+      timeout: 8000
+    });
+    const results = res.data?.data || [];
+    return results.slice(0, 4).map(m => {
+      const score  = m.score ? `⭐${m.score}` : '';
+      const status = m.status || 'Unknown';
+      return `📖 "${m.title}" ${score} (${status})`;
+    }).join('\n') || null;
+  } catch (e) {
+    console.log('Jikan manga:', e.message);
+    return null;
+  }
+}
+
+// ─── PokéAPI — Complete Pokémon database ─────────────────────
+// Because AVANT should know everything — including Pokédex data
+export async function getPokemon(nameOrId) {
+  try {
+    const res = await axios.get(`${POKEAPI_BASE}/pokemon/${String(nameOrId).toLowerCase()}`, { timeout: 8000 });
+    const p = res.data;
+    const types  = p.types.map(t => t.type.name).join(', ');
+    const stats  = p.stats.map(s => `${s.stat.name}: ${s.base_stat}`).join(' | ');
+    const height = (p.height / 10).toFixed(1);
+    const weight = (p.weight / 10).toFixed(1);
+    return {
+      name:   p.name,
+      id:     p.id,
+      types,
+      height: `${height}m`,
+      weight: `${weight}kg`,
+      stats,
+      sprite: p.sprites?.other?.['official-artwork']?.front_default || p.sprites?.front_default
+    };
+  } catch (e) {
+    console.log('PokéAPI:', e.message);
+    return null;
+  }
+}
+
+export function formatPokemonForSpeech(p) {
+  if (!p) return "I couldn't find that Pokémon.";
+  return `${p.name.charAt(0).toUpperCase() + p.name.slice(1)} is a ${p.types} type Pokémon. ` +
+    `Number ${p.id} in the Pokédex. ` +
+    `It stands ${p.height} tall and weighs ${p.weight}. ` +
+    `Base stats: ${p.stats}.`;
+}
+
+// ════════════════════════════════════════════════════════════
+// 🎯 UPDATED EXTENDED INTENT DETECTOR
+//    Handles all new zero-signup APIs
+// ════════════════════════════════════════════════════════════
+
+export function detectAllIntents(text) {
+  const lower = text.toLowerCase();
+
+  // ── Research & Academic ──────────────────────────────────
+  if (/(research paper|arxiv|latest paper|academic|scientific paper|study about)/i.test(lower)) {
+    const match = lower.match(/(?:paper|research|study)(?: about| on)?\s+(.+)/);
+    return { type: 'arxiv', target: match?.[1] || lower };
+  }
+  if (/(medical|medicine|drug|treatment|clinical|disease|symptom|health research)/i.test(lower)) {
+    const match = lower.match(/(?:medical|medicine|drug|treatment|disease|symptom)s?\s*(?:for|about|of)?\s*(.+)/);
+    return { type: 'europepmc', target: match?.[1] || lower };
+  }
+  if (/(wikidata|structured fact|tallest|richest country|most populated|nobel prize winner)/i.test(lower)) {
+    return { type: 'wikidata', target: lower };
+  }
+  if (/(scholarly|journal|publication|cite|crossref)/i.test(lower)) {
+    return { type: 'crossref', target: lower };
+  }
+  if (/(academic paper|openalex|published work)/i.test(lower)) {
+    return { type: 'openalex', target: lower };
+  }
+
+  // ── Entertainment ────────────────────────────────────────
+  if (/(anime|manga|one piece|naruto|dragon ball|attack on titan|demon slayer)/i.test(lower)) {
+    const match = lower.match(/(?:anime|manga|about|watch)\s+(.+)/);
+    return { type: 'anime', target: match?.[1] || lower };
+  }
+  if (/(tv show|what.s on tv|series|episodes? of|watch|television schedule)/i.test(lower)) {
+    const match = lower.match(/(?:show|series|episodes? of|about|watch)\s+(.+)/);
+    return { type: 'tvshow', target: match?.[1] || lower };
+  }
+  if (/(tonight.s tv|what.s on tonight|tv schedule|tv tonight)/i.test(lower)) {
+    return { type: 'tvschedule', target: 'tonight' };
+  }
+
+  // ── Pokémon ──────────────────────────────────────────────
+  if (/(pokemon|pokémon|pikachu|charizard|bulbasaur|squirtle|pokedex)/i.test(lower)) {
+    const match = lower.match(/(?:pokemon|pokémon|pokedex|tell me about)\s+(.+)/);
+    return { type: 'pokemon', target: match?.[1]?.trim() || 'pikachu' };
+  }
+
+  // ── Earthquake ───────────────────────────────────────────
+  if (/(earthquake|seismic|tremor|quake|fault line)/i.test(lower))
+    return { type: 'earthquake', target: lower };
+
+  // ── ISS ──────────────────────────────────────────────────
+  if (/(iss|space station|astronaut|who.s in space|people in space)/i.test(lower))
+    return { type: 'iss', target: 'iss' };
+
+  // ── Tech News ────────────────────────────────────────────
+  if (/(hacker news|tech news|developer news|startup news|hn top)/i.test(lower))
+    return { type: 'hackernews', target: lower };
+
+  // ── Books ────────────────────────────────────────────────
+  if (/(gutenberg|public domain|free book|classic book|project gutenberg)/i.test(lower)) {
+    const match = lower.match(/(?:find|search|get)(?: book)?\s+(.+)/);
+    return { type: 'gutenberg', target: match?.[1] || lower };
+  }
+
+  // ── Fun ──────────────────────────────────────────────────
+  if (/(show.*cat|random cat|cat pic|kitty)/i.test(lower))  return { type: 'cat', target: 'cat' };
+  if (/(show.*dog|random dog|dog pic|puppy)/i.test(lower))  return { type: 'dog', target: 'dog' };
+
+  // ── Crypto ───────────────────────────────────────────────
+  if (/(bitcoin|ethereum|crypto|btc|eth|solana|dogecoin|price of)/i.test(lower)) {
+    const coinMap = { bitcoin: 'bitcoin', btc: 'bitcoin', ethereum: 'ethereum', eth: 'ethereum', solana: 'solana', dogecoin: 'dogecoin', doge: 'dogecoin' };
+    const found   = Object.keys(coinMap).find(k => lower.includes(k));
     return { type: 'crypto', target: coinMap[found] || 'bitcoin' };
   }
 
