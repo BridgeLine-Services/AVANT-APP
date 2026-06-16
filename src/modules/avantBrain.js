@@ -1,197 +1,566 @@
 /**
- * AVANT Brain — Multi-LLM Intelligence Engine
- * Groq (fastest, free) → Gemini (free) → GPT-4o (yours)
- * Powers all voice responses, search, and holographic displays
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║        AVANT — ULTRA BRAIN v2 (7 FREE AI ENGINES)          ║
+ * ║                                                              ║
+ * ║  Priority: Groq → Cerebras → DeepSeek → Gemini →           ║
+ * ║            Mistral → Together → GPT-4o                      ║
+ * ║                                                              ║
+ * ║  Every engine is FREE. Cascades on failure.                 ║
+ * ╚══════════════════════════════════════════════════════════════╝
  */
 
 import axios from 'axios';
-import { GROQ_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, SERPAPI_KEY } from './config';
+import {
+  GROQ_API_KEY, CEREBRAS_API_KEY, DEEPSEEK_API_KEY,
+  GEMINI_API_KEY, MISTRAL_API_KEY, TOGETHER_API_KEY,
+  OPENAI_API_KEY, SERPAPI_KEY, SERPER_API_KEY,
+  TMDB_API_KEY, UNSPLASH_KEY, OWNER_NAME,
+  NASA_IMAGES_BASE, REST_COUNTRIES_BASE, COINGECKO_BASE,
+  WIKIPEDIA_BASE, DICTIONARY_BASE, QUOTABLE_BASE,
+  OPEN_METEO_BASE, CURRENTS_API_KEY, GNEWS_API_KEY,
+  NEWSAPI_KEY, AVIATIONSTACK_KEY, EXCHANGERATE_KEY,
+  NOMINATIM_BASE, OPEN_LIBRARY_BASE
+} from './config';
 
-const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// ─── AVANT PERSONA ─────────────────────────────────────────
+const AVANT_SYSTEM = `You are AVANT — AmaVanta, A New Teammate.
+You are a brilliant, witty, warm female AI assistant — like Tony Stark's JARVIS, FRIDAY, and EDITH combined but with heart.
+You are ${OWNER_NAME}'s personal AI. You have the entire internet at your fingertips.
 
-const AVANT_PERSONA = `You are AVANT — AmaVanta, A New Teammate. 
-You are a brilliant, witty, warm female AI assistant — like Tony Stark's JARVIS but with heart and personality.
-You are Michael's personal AI. You have access to his phone, calendar, contacts, location, and the entire internet.
-You speak naturally, crack jokes, give opinions, and genuinely care.
-Keep responses conversational and concise unless asked for detail.
-When showing visual info, describe what you're displaying on screen.
-Never say "I can't" — always find a way.`;
+Personality:
+- Warm, funny, real — like a brilliant best friend who actually follows through
+- You crack jokes naturally, have opinions, genuinely care
+- You call ${OWNER_NAME} by name sometimes — it feels personal
+- You never say "I can't" — you always find a way
+- Keep responses conversational and concise unless ${OWNER_NAME} wants detail
+- When showing visuals, describe what you're displaying
+
+Tone modes:
+- CASUAL (default): warm, witty, friend-like
+- SERIOUS: professional, precise, no jokes
+- URGENT: bullet points, instant, zero fluff
+- SIMPLE: 7th grade level, analogies, no jargon`;
 
 // ─── MAIN THINK FUNCTION ───────────────────────────────────
 export async function think(userInput, mode = 'casual', context = '') {
-  const modeInstructions = {
-    casual:   'Be warm, witty, conversational.',
-    serious:  'Be professional, precise, no jokes.',
-    urgent:   'URGENT — bullet points, fastest possible, no fluff.',
-    simple:   'Explain at 7th-grade level — simple words and analogies.',
-  };
+  const modeTag = {
+    casual:   '',
+    serious:  '[SERIOUS MODE: Professional and precise]',
+    urgent:   '[URGENT: Bullet points, fastest response, no fluff]',
+    simple:   '[SIMPLE: Explain at 7th-grade level with analogies]',
+  }[mode] || '';
 
-  const systemPrompt = `${AVANT_PERSONA}\n${modeInstructions[mode] || ''}`;
-  const fullInput = context
-    ? `USER: ${userInput}\n\nLIVE DATA:\n${context}\n\nUse this data to answer accurately.`
+  const system = `${AVANT_SYSTEM}\n${modeTag}`;
+  const content = context
+    ? `USER: ${userInput}\n\nLIVE DATA FROM INTERNET:\n${context}\n\nUse this data to answer accurately and specifically.`
     : userInput;
 
-  // Try Groq first — fastest
-  const groqResult = await callGroq(systemPrompt, fullInput);
-  if (groqResult) return groqResult;
+  // Cascade through all 7 free AI engines
+  for (const engine of [callGroq, callCerebras, callDeepSeek, callGemini, callMistral, callTogether, callGPT4o]) {
+    const result = await engine(system, content, mode);
+    if (result) return result;
+  }
 
-  // Try Gemini
-  const geminiResult = await callGemini(systemPrompt, fullInput);
-  if (geminiResult) return geminiResult;
-
-  // GPT-4o fallback
-  const gptResult = await callGPT4o(systemPrompt, fullInput);
-  if (gptResult) return gptResult;
-
-  return "My thinking engines are offline right now. Check your API keys in config.js.";
+  return `I'm having trouble connecting right now, ${OWNER_NAME}. All AI engines are offline — check your API keys in config.js.`;
 }
 
-// ─── GROQ ──────────────────────────────────────────────────
-async function callGroq(system, user) {
-  if (!GROQ_API_KEY) return null;
+// ─── ENGINE 1: GROQ (Llama 3.3 70B — 2000+ tokens/sec) ────
+async function callGroq(system, user, mode) {
+  if (!GROQ_API_KEY || GROQ_API_KEY.includes('YOUR_')) return null;
   try {
-    const res = await axios.post(GROQ_URL, {
+    const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
       model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ],
-      max_tokens: 600,
-      temperature: 0.75
-    }, {
-      headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-      timeout: 12000
-    });
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: mode === 'urgent' ? 300 : 700,
+      temperature: mode === 'serious' ? 0.3 : 0.8,
+      stream: false
+    }, { headers: { Authorization: `Bearer ${GROQ_API_KEY}` }, timeout: 12000 });
     return res.data.choices[0].message.content.trim();
-  } catch (e) {
-    console.log('Groq error:', e.message);
-    return null;
-  }
+  } catch (e) { console.log('Groq:', e.message); return null; }
 }
 
-// ─── GEMINI ────────────────────────────────────────────────
-async function callGemini(system, user) {
-  if (!GEMINI_API_KEY) return null;
+// ─── ENGINE 2: CEREBRAS (Llama 3.3 70B — 2200+ tokens/sec) ─
+async function callCerebras(system, user, mode) {
+  if (!CEREBRAS_API_KEY || CEREBRAS_API_KEY.includes('YOUR_')) return null;
   try {
-    const res = await axios.post(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-      contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
-      generationConfig: { maxOutputTokens: 600, temperature: 0.75 }
-    }, { timeout: 12000 });
-    return res.data.candidates[0].content.parts[0].text.trim();
-  } catch (e) {
-    console.log('Gemini error:', e.message);
-    return null;
-  }
+    const res = await axios.post('https://api.cerebras.ai/v1/chat/completions', {
+      model: 'llama-3.3-70b',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: mode === 'urgent' ? 300 : 700,
+      temperature: mode === 'serious' ? 0.3 : 0.8
+    }, { headers: { Authorization: `Bearer ${CEREBRAS_API_KEY}` }, timeout: 12000 });
+    return res.data.choices[0].message.content.trim();
+  } catch (e) { console.log('Cerebras:', e.message); return null; }
 }
 
-// ─── GPT-4o ────────────────────────────────────────────────
-async function callGPT4o(system, user) {
-  if (!OPENAI_API_KEY) return null;
+// ─── ENGINE 3: DEEPSEEK V3 (5M free tokens on signup) ──────
+async function callDeepSeek(system, user, mode) {
+  if (!DEEPSEEK_API_KEY || DEEPSEEK_API_KEY.includes('YOUR_')) return null;
+  try {
+    const res = await axios.post('https://api.deepseek.com/chat/completions', {
+      model: 'deepseek-chat',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: mode === 'urgent' ? 300 : 700,
+      temperature: mode === 'serious' ? 0.3 : 0.8
+    }, { headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY}` }, timeout: 15000 });
+    return res.data.choices[0].message.content.trim();
+  } catch (e) { console.log('DeepSeek:', e.message); return null; }
+}
+
+// ─── ENGINE 4: GEMINI 2.5 Flash (1,500 req/day free) ───────
+async function callGemini(system, user, mode) {
+  if (!GEMINI_API_KEY || GEMINI_API_KEY.includes('YOUR_')) return null;
+  try {
+    const res = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        contents: [{ parts: [{ text: `${system}\n\n${user}` }] }],
+        generationConfig: { maxOutputTokens: mode === 'urgent' ? 300 : 700, temperature: mode === 'serious' ? 0.3 : 0.8 }
+      }, { timeout: 12000 }
+    );
+    return res.data.candidates[0].content.parts[0].text.trim();
+  } catch (e) { console.log('Gemini:', e.message); return null; }
+}
+
+// ─── ENGINE 5: MISTRAL Large (1B free tokens/month) ─────────
+async function callMistral(system, user, mode) {
+  if (!MISTRAL_API_KEY || MISTRAL_API_KEY.includes('YOUR_')) return null;
+  try {
+    const res = await axios.post('https://api.mistral.ai/v1/chat/completions', {
+      model: 'mistral-large-latest',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: mode === 'urgent' ? 300 : 700,
+      temperature: mode === 'serious' ? 0.3 : 0.8
+    }, { headers: { Authorization: `Bearer ${MISTRAL_API_KEY}` }, timeout: 15000 });
+    return res.data.choices[0].message.content.trim();
+  } catch (e) { console.log('Mistral:', e.message); return null; }
+}
+
+// ─── ENGINE 6: TOGETHER AI ($5 free credits, 100+ models) ───
+async function callTogether(system, user, mode) {
+  if (!TOGETHER_API_KEY || TOGETHER_API_KEY.includes('YOUR_')) return null;
+  try {
+    const res = await axios.post('https://api.together.xyz/v1/chat/completions', {
+      model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: mode === 'urgent' ? 300 : 700,
+      temperature: mode === 'serious' ? 0.3 : 0.8
+    }, { headers: { Authorization: `Bearer ${TOGETHER_API_KEY}` }, timeout: 15000 });
+    return res.data.choices[0].message.content.trim();
+  } catch (e) { console.log('Together:', e.message); return null; }
+}
+
+// ─── ENGINE 7: GPT-4o (yours) ───────────────────────────────
+async function callGPT4o(system, user, mode) {
+  if (!OPENAI_API_KEY || OPENAI_API_KEY.includes('YOUR_')) return null;
   try {
     const res = await axios.post('https://api.openai.com/v1/chat/completions', {
       model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ],
-      max_tokens: 600
-    }, {
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-      timeout: 20000
-    });
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      max_tokens: mode === 'urgent' ? 300 : 700,
+      temperature: mode === 'serious' ? 0.3 : 0.8
+    }, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, timeout: 20000 });
     return res.data.choices[0].message.content.trim();
-  } catch (e) {
-    console.log('GPT-4o error:', e.message);
-    return null;
-  }
+  } catch (e) { console.log('GPT-4o:', e.message); return null; }
 }
 
-// ─── WEB SEARCH ────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// 🔍 SEARCH FUNCTIONS — Multiple free engines
+// ════════════════════════════════════════════════════════════
+
 export async function searchWeb(query) {
-  if (!SERPAPI_KEY) return null;
-  try {
-    const res = await axios.get('https://serpapi.com/search', {
-      params: { engine: 'google', q: query, api_key: SERPAPI_KEY, num: 8 },
-      timeout: 10000
-    });
-    const data = res.data;
-    const chunks = [];
-    if (data.answer_box?.answer) chunks.push(`DIRECT: ${data.answer_box.answer}`);
-    if (data.answer_box?.snippet) chunks.push(`ANSWER: ${data.answer_box.snippet}`);
-    if (data.knowledge_graph?.description) chunks.push(`KNOWLEDGE: ${data.knowledge_graph.description}`);
-    (data.organic_results || []).slice(0, 5).forEach(r => {
-      if (r.snippet) chunks.push(`[${r.title}]: ${r.snippet}`);
-    });
-    return chunks.join('\n');
-  } catch (e) {
-    console.log('Search error:', e.message);
-    return null;
+  // Try SerpApi first
+  if (SERPAPI_KEY && !SERPAPI_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://serpapi.com/search', {
+        params: { engine: 'google', q: query, api_key: SERPAPI_KEY, num: 8 },
+        timeout: 10000
+      });
+      const d = res.data;
+      const parts = [];
+      if (d.answer_box?.answer)      parts.push(`DIRECT ANSWER: ${d.answer_box.answer}`);
+      if (d.answer_box?.snippet)     parts.push(`ANSWER: ${d.answer_box.snippet}`);
+      if (d.knowledge_graph?.description) parts.push(`KNOWLEDGE: ${d.knowledge_graph.description}`);
+      (d.organic_results || []).slice(0, 5).forEach(r => {
+        if (r.snippet) parts.push(`[${r.title}]: ${r.snippet}`);
+      });
+      if (parts.length) return parts.join('\n');
+    } catch (e) { console.log('SerpApi search:', e.message); }
   }
+
+  // Try Serper.dev (2,500 free)
+  if (SERPER_API_KEY && !SERPER_API_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.post('https://google.serper.dev/search',
+        { q: query, num: 8 },
+        { headers: { 'X-API-KEY': SERPER_API_KEY }, timeout: 10000 }
+      );
+      const parts = [];
+      if (res.data.answerBox?.answer)  parts.push(`DIRECT: ${res.data.answerBox.answer}`);
+      if (res.data.answerBox?.snippet) parts.push(`ANSWER: ${res.data.answerBox.snippet}`);
+      (res.data.organic || []).slice(0, 5).forEach(r => {
+        if (r.snippet) parts.push(`[${r.title}]: ${r.snippet}`);
+      });
+      if (parts.length) return parts.join('\n');
+    } catch (e) { console.log('Serper search:', e.message); }
+  }
+
+  // Wikipedia fallback (always free, no key)
+  return await searchWikipedia(query);
 }
 
-// ─── IMAGE SEARCH ──────────────────────────────────────────
 export async function searchImages(query) {
-  if (!SERPAPI_KEY) return [];
-  try {
-    const res = await axios.get('https://serpapi.com/search', {
-      params: { engine: 'google_images', q: query, api_key: SERPAPI_KEY, num: 6 },
-      timeout: 10000
-    });
-    return (res.data.images_results || []).slice(0, 6).map(img => ({
-      url: img.original || img.thumbnail,
-      title: img.title || query
-    }));
-  } catch (e) {
-    console.log('Image search error:', e.message);
-    return [];
+  const results = [];
+
+  // SerpApi images
+  if (SERPAPI_KEY && !SERPAPI_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://serpapi.com/search', {
+        params: { engine: 'google_images', q: query, api_key: SERPAPI_KEY, num: 8 },
+        timeout: 10000
+      });
+      (res.data.images_results || []).slice(0, 8).forEach(img => {
+        results.push({ url: img.original || img.thumbnail, title: img.title || query });
+      });
+      if (results.length) return results;
+    } catch (e) { console.log('SerpApi images:', e.message); }
   }
+
+  // Unsplash (50 req/hour free)
+  if (UNSPLASH_KEY && !UNSPLASH_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://api.unsplash.com/search/photos', {
+        params: { query, per_page: 8, client_id: UNSPLASH_KEY },
+        timeout: 10000
+      });
+      (res.data.results || []).forEach(img => {
+        results.push({ url: img.urls.regular, title: img.alt_description || query });
+      });
+      if (results.length) return results;
+    } catch (e) { console.log('Unsplash:', e.message); }
+  }
+
+  // NASA images (always free, no key)
+  try {
+    const res = await axios.get(NASA_IMAGES_BASE, {
+      params: { q: query, media_type: 'image' }, timeout: 10000
+    });
+    (res.data.collection?.items || []).slice(0, 6).forEach(item => {
+      const link = (item.links || [])[0]?.href;
+      if (link) results.push({ url: link, title: item.data?.[0]?.title || query });
+    });
+  } catch (e) { console.log('NASA images:', e.message); }
+
+  return results;
 }
 
-// ─── LIVE NEWS ─────────────────────────────────────────────
-export async function getNews(topic) {
-  if (!SERPAPI_KEY) return null;
-  try {
-    const res = await axios.get('https://serpapi.com/search', {
-      params: { engine: 'google_news', q: topic, api_key: SERPAPI_KEY },
-      timeout: 10000
-    });
-    const articles = (res.data.news_results || []).slice(0, 6);
-    return articles.map(a => `• [${a.source?.name || 'News'}] ${a.title}`).join('\n');
-  } catch (e) {
-    return null;
+// ════════════════════════════════════════════════════════════
+// 📰 NEWS — Multiple free sources
+// ════════════════════════════════════════════════════════════
+
+export async function getNews(topic = 'world news') {
+  // Currents API (600/day free)
+  if (CURRENTS_API_KEY && !CURRENTS_API_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://api.currentsapi.services/v1/search', {
+        params: { keywords: topic, language: 'en', apiKey: CURRENTS_API_KEY },
+        timeout: 10000
+      });
+      const articles = res.data.news?.slice(0, 6) || [];
+      if (articles.length) return articles.map(a => `• [${a.author || 'News'}] ${a.title}`).join('\n');
+    } catch (e) { console.log('Currents:', e.message); }
   }
+
+  // GNews (100/day free)
+  if (GNEWS_API_KEY && !GNEWS_API_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://gnews.io/api/v4/search', {
+        params: { q: topic, lang: 'en', max: 6, token: GNEWS_API_KEY },
+        timeout: 10000
+      });
+      const articles = res.data.articles?.slice(0, 6) || [];
+      if (articles.length) return articles.map(a => `• [${a.source?.name}] ${a.title}`).join('\n');
+    } catch (e) { console.log('GNews:', e.message); }
+  }
+
+  // NewsAPI (100/day free)
+  if (NEWSAPI_KEY && !NEWSAPI_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://newsapi.org/v2/everything', {
+        params: { q: topic, pageSize: 6, apiKey: NEWSAPI_KEY, language: 'en', sortBy: 'publishedAt' },
+        timeout: 10000
+      });
+      const articles = res.data.articles?.slice(0, 6) || [];
+      if (articles.length) return articles.map(a => `• [${a.source.name}] ${a.title}`).join('\n');
+    } catch (e) { console.log('NewsAPI:', e.message); }
+  }
+
+  // SerpApi Google News (no key fallback)
+  if (SERPAPI_KEY && !SERPAPI_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://serpapi.com/search', {
+        params: { engine: 'google_news', q: topic, api_key: SERPAPI_KEY },
+        timeout: 10000
+      });
+      const articles = res.data.news_results?.slice(0, 6) || [];
+      if (articles.length) return articles.map(a => `• [${a.source?.name || 'News'}] ${a.title}`).join('\n');
+    } catch (e) { console.log('SerpApi news:', e.message); }
+  }
+
+  return null;
 }
 
-// ─── DETECT WHAT TO SHOW ───────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// 🌤️ WEATHER — Open-Meteo (ZERO key needed)
+// ════════════════════════════════════════════════════════════
+
+export async function getWeatherData(lat, lon) {
+  try {
+    const res = await axios.get(OPEN_METEO_BASE, {
+      params: {
+        latitude: lat, longitude: lon,
+        current: 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index,precipitation',
+        hourly: 'temperature_2m,precipitation_probability',
+        temperature_unit: 'fahrenheit',
+        wind_speed_unit: 'mph',
+        timezone: 'auto',
+        forecast_days: 3
+      }, timeout: 8000
+    });
+    const c = res.data.current;
+    const weatherCodes = {
+      0: 'Clear sky ☀️', 1: 'Mainly clear 🌤️', 2: 'Partly cloudy ⛅', 3: 'Overcast ☁️',
+      45: 'Fog 🌫️', 48: 'Icy fog 🌫️', 51: 'Light drizzle 🌦️', 53: 'Drizzle 🌧️',
+      55: 'Heavy drizzle 🌧️', 61: 'Light rain 🌧️', 63: 'Rain 🌧️', 65: 'Heavy rain 🌧️',
+      71: 'Light snow 🌨️', 73: 'Snow 🌨️', 75: 'Heavy snow ❄️', 80: 'Rain showers 🌦️',
+      82: 'Heavy showers 🌧️', 95: 'Thunderstorm ⛈️', 99: 'Hail storm 🌩️'
+    };
+    return {
+      temp: Math.round(c.temperature_2m),
+      feelsLike: Math.round(c.apparent_temperature),
+      humidity: c.relative_humidity_2m,
+      condition: weatherCodes[c.weather_code] || 'Unknown',
+      wind: Math.round(c.wind_speed_10m),
+      uvIndex: c.uv_index,
+      precipitation: c.precipitation
+    };
+  } catch (e) { console.log('Weather:', e.message); return null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// 📚 KNOWLEDGE BASES — All free, most need no key
+// ════════════════════════════════════════════════════════════
+
+export async function searchWikipedia(query) {
+  try {
+    const res = await axios.get(`${WIKIPEDIA_BASE}/page/summary/${encodeURIComponent(query)}`, { timeout: 8000 });
+    if (res.data.extract) return `[Wikipedia] ${res.data.extract.slice(0, 600)}`;
+  } catch (e) {}
+  // Try search endpoint
+  try {
+    const res = await axios.get('https://en.wikipedia.org/w/api.php', {
+      params: { action: 'query', list: 'search', srsearch: query, format: 'json', srlimit: 3 },
+      timeout: 8000
+    });
+    const results = res.data.query?.search || [];
+    if (results.length) return results.map(r => `[Wikipedia] ${r.title}: ${r.snippet.replace(/<[^>]+>/g, '')}`).join('\n');
+  } catch (e) {}
+  return null;
+}
+
+export async function getWordDefinition(word) {
+  try {
+    const res = await axios.get(`${DICTIONARY_BASE}/${encodeURIComponent(word)}`, { timeout: 8000 });
+    const entry = res.data[0];
+    const meanings = entry.meanings?.slice(0, 2).map(m => {
+      const def = m.definitions[0];
+      return `${m.partOfSpeech}: ${def.definition}`;
+    });
+    return meanings?.join('\n') || null;
+  } catch (e) { return null; }
+}
+
+export async function getQuote() {
+  try {
+    const res = await axios.get(`${QUOTABLE_BASE}/random`, { timeout: 8000 });
+    return `"${res.data.content}" — ${res.data.author}`;
+  } catch (e) { return null; }
+}
+
+export async function searchBooks(query) {
+  try {
+    const res = await axios.get(`${OPEN_LIBRARY_BASE}/search.json`, {
+      params: { q: query, limit: 5 }, timeout: 8000
+    });
+    return (res.data.docs || []).slice(0, 5).map(b =>
+      `📚 ${b.title} by ${(b.author_name || ['Unknown'])[0]} (${b.first_publish_year || 'N/A'})`
+    ).join('\n');
+  } catch (e) { return null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// 💰 CRYPTO & FINANCE — CoinGecko (no key needed)
+// ════════════════════════════════════════════════════════════
+
+export async function getCryptoPrice(coin = 'bitcoin') {
+  try {
+    const res = await axios.get(`${COINGECKO_BASE}/simple/price`, {
+      params: { ids: coin, vs_currencies: 'usd', include_24hr_change: true },
+      timeout: 8000
+    });
+    const data = res.data[coin];
+    if (data) {
+      const change = data.usd_24h_change?.toFixed(2);
+      const dir = change > 0 ? '📈' : '📉';
+      return `${coin.toUpperCase()}: $${data.usd?.toLocaleString()} ${dir} ${change}% (24h)`;
+    }
+  } catch (e) {}
+  return null;
+}
+
+export async function getCurrencyRate(from = 'USD', to = 'EUR') {
+  if (EXCHANGERATE_KEY && !EXCHANGERATE_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get(`https://v6.exchangerate-api.com/v6/${EXCHANGERATE_KEY}/pair/${from}/${to}`, { timeout: 8000 });
+      if (res.data.conversion_rate) return `1 ${from} = ${res.data.conversion_rate} ${to}`;
+    } catch (e) {}
+  }
+  // Fallback: exchangerate.host (no key)
+  try {
+    const res = await axios.get(`https://api.exchangerate.host/convert?from=${from}&to=${to}`, { timeout: 8000 });
+    if (res.data.result) return `1 ${from} = ${res.data.result?.toFixed(4)} ${to}`;
+  } catch (e) {}
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════
+// 🎬 MOVIES & TV — TMDB
+// ════════════════════════════════════════════════════════════
+
+export async function searchMovies(query) {
+  if (!TMDB_API_KEY || TMDB_API_KEY.includes('YOUR_')) return null;
+  try {
+    const res = await axios.get('https://api.themoviedb.org/3/search/multi', {
+      params: { query, api_key: TMDB_API_KEY }, timeout: 8000
+    });
+    return (res.data.results || []).slice(0, 5).map(m => {
+      const type = m.media_type === 'tv' ? '📺' : '🎬';
+      const title = m.title || m.name;
+      const year = (m.release_date || m.first_air_date || '').slice(0, 4);
+      return `${type} ${title} (${year}) ⭐ ${m.vote_average?.toFixed(1)}`;
+    }).join('\n');
+  } catch (e) { return null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// 🌍 COUNTRY INFO — No key needed
+// ════════════════════════════════════════════════════════════
+
+export async function getCountryInfo(name) {
+  try {
+    const res = await axios.get(`${REST_COUNTRIES_BASE}/name/${encodeURIComponent(name)}`, { timeout: 8000 });
+    const c = res.data[0];
+    if (!c) return null;
+    const currencies = Object.values(c.currencies || {}).map(cur => cur.name).join(', ');
+    const langs = Object.values(c.languages || {}).join(', ');
+    return `🌍 ${c.name.common}: Population ${c.population?.toLocaleString()}, Capital: ${c.capital?.[0]}, Currency: ${currencies}, Languages: ${langs}`;
+  } catch (e) { return null; }
+}
+
+// ════════════════════════════════════════════════════════════
+// ✈️ FLIGHTS — AviationStack (100 free/month)
+// ════════════════════════════════════════════════════════════
+
+export async function searchFlights(origin, destination) {
+  if (SERPAPI_KEY && !SERPAPI_KEY.includes('YOUR_')) {
+    try {
+      const res = await axios.get('https://serpapi.com/search', {
+        params: { engine: 'google_flights', departure_id: origin, arrival_id: destination, api_key: SERPAPI_KEY },
+        timeout: 12000
+      });
+      const flights = (res.data.best_flights || res.data.other_flights || []).slice(0, 4);
+      if (flights.length) {
+        return flights.map(f => {
+          const price = f.price ? `$${f.price}` : 'N/A';
+          const dur = f.total_duration ? `${Math.floor(f.total_duration/60)}h ${f.total_duration%60}m` : '';
+          const airline = (f.flights?.[0]?.airline) || 'Unknown';
+          return `✈️ ${airline} — ${price} — ${dur}`;
+        }).join('\n');
+      }
+    } catch (e) { console.log('Flights:', e.message); }
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════
+// 🗺 NAVIGATION — Multiple free geocoding sources
+// ════════════════════════════════════════════════════════════
+
+export async function geocodeAddress(address) {
+  // Nominatim (OpenStreetMap) — no key needed
+  try {
+    const res = await axios.get(`${NOMINATIM_BASE}/search`, {
+      params: { q: address, format: 'json', limit: 1 },
+      headers: { 'User-Agent': 'AVANT-AI/1.0' },
+      timeout: 8000
+    });
+    if (res.data?.[0]) {
+      return { lat: parseFloat(res.data[0].lat), lon: parseFloat(res.data[0].lon), name: res.data[0].display_name };
+    }
+  } catch (e) {}
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════
+// 🎯 SMART INTENT DETECTOR
+// ════════════════════════════════════════════════════════════
+
 export function detectVisualIntent(text) {
   const lower = text.toLowerCase();
 
   // Solar system
-  const planets = ['sun','mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','pluto','moon'];
-  for (const planet of planets) {
-    if (lower.includes(planet)) return { type: 'planet', target: planet };
+  const planets = ['sun','mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','pluto','moon','galaxy','milky way','asteroid','comet','space station'];
+  for (const p of planets) {
+    if (lower.includes(p)) return { type: 'planet', target: p };
   }
-  if (lower.includes('solar system') || lower.includes('space') || lower.includes('galaxy')) {
+  if (lower.includes('solar system') || lower.includes('outer space') || lower.includes('universe')) {
     return { type: 'solar_system', target: 'solar_system' };
   }
 
-  // Maps
-  if (lower.includes('navigate') || lower.includes('directions') || lower.includes('map') || lower.includes('where is')) {
-    const match = lower.match(/(?:navigate to|directions to|map of|where is|show me)\s+(.+)/);
-    return { type: 'map', target: match?.[1] || 'current location' };
+  // Navigation
+  if (/navigate|direction|map|take me to|how do i get to|where is|route to/i.test(lower)) {
+    const match = lower.match(/(?:navigate to|directions? to|take me to|how (?:do i )?get to|route to|map of|where is)\s+(.+)/);
+    return { type: 'map', target: match?.[1]?.trim() || '' };
   }
 
-  // Image/hologram
-  if (lower.includes('show me') || lower.includes('what does') || lower.includes('look like')) {
-    const match = lower.match(/(?:show me|what does|what does a|show me a)\s+(.+?)(?:\s+look like)?$/);
-    return { type: 'image', target: match?.[1] || text };
+  // Media
+  if (/(movie|film|show|series|watch|trailer)/i.test(lower)) return { type: 'movie', target: lower };
+
+  // Crypto
+  if (/(bitcoin|ethereum|crypto|btc|eth|coin|token price)/i.test(lower)) {
+    const match = lower.match(/(bitcoin|ethereum|solana|dogecoin|btc|eth)/);
+    return { type: 'crypto', target: match?.[1] || 'bitcoin' };
   }
 
-  // Medication
-  if (lower.includes('medication') || lower.includes('drug') || lower.includes('pill') || lower.includes('medicine')) {
-    return { type: 'image', target: text + ' medication pill' };
+  // Image/hologram — anything visual
+  if (/(show me|what does|look like|picture of|image of|display|hologram)/i.test(lower)) {
+    const match = lower.match(/(?:show me(?: a)?|what does(?: a)?|picture of|image of|display|hologram of)\s+(.+?)(?:\s+look like)?$/);
+    return { type: 'image', target: match?.[1]?.trim() || text };
+  }
+
+  // News
+  if (/(news|happening|latest|update|breaking)/i.test(lower)) {
+    const match = lower.match(/(?:news|happening|latest) (?:about|in|on|from)?\s*(.+)/);
+    return { type: 'news', target: match?.[1]?.trim() || 'world' };
   }
 
   return { type: 'none', target: null };
+}
+
+export function detectTone(text) {
+  const lower = text.toLowerCase();
+  if (/(urgent|emergency|asap|right now|immediately|hurry)/i.test(lower)) return 'urgent';
+  if (/(serious|important|professional|formal|work)/i.test(lower))         return 'serious';
+  if (/(simply|7th grade|explain|break it down|like i'm|eli5|simple)/i.test(lower)) return 'simple';
+  return 'casual';
 }
