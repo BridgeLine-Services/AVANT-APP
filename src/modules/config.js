@@ -67,10 +67,9 @@ export const GOOGLE_MAPS_KEY = 'YOUR_GOOGLE_MAPS_DEMO_KEY';
 // 🌤️ WEATHER — NO KEY NEEDED (but key = more data)
 // ════════════════════════════════════════════════════════════════
 
-// 11. OPEN-METEO — ZERO key needed — 10,000 calls/day FREE
+// 11. OPEN-METEO — ZERO key needed — 10,000 calls/day FREE ✅ WORKING
 //     No signup. No key. Best free weather API on earth.
 //     Docs: https://open-meteo.com/en/docs
-//     Usage: just call the URL directly (see weatherModule)
 export const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
 
 // 12. OPENWEATHER — More data (UV, air quality, alerts)
@@ -98,35 +97,35 @@ export const GNEWS_API_KEY = 'YOUR_GNEWS_API_KEY';
 export const NEWSAPI_KEY = 'YOUR_NEWSAPI_KEY';
 
 // ════════════════════════════════════════════════════════════════
-// 🚀 NASA & SPACE — 100% FREE
+// 🚀 NASA & SPACE — 100% FREE ✅ WORKING
 // ════════════════════════════════════════════════════════════════
 
 // 16. NASA API — APOD, Mars Rover, EPIC Earth, Asteroids, more
-//     Free: DEMO_KEY works. Register for 1,000 req/hour.
+//     DEMO_KEY works right now. Register for 1,000 req/hour.
 //     Sign up: https://api.nasa.gov
-export const NASA_API_KEY = 'DEMO_KEY'; // Replace after signup
+export const NASA_API_KEY = 'DEMO_KEY';
 
-// NASA Image Search (no key needed):
+// NASA Image Search — No key needed ✅ WORKING
 export const NASA_IMAGES_BASE = 'https://images-api.nasa.gov/search';
 
 // ════════════════════════════════════════════════════════════════
-// 🌍 GEOLOCATION & COUNTRIES — NO KEY NEEDED
+// 🌍 GEOLOCATION & COUNTRIES — NO KEY NEEDED ✅ ALL WORKING
 // ════════════════════════════════════════════════════════════════
 
-// 17. REST COUNTRIES — No key — Country data, flags, currencies
+// 17. REST COUNTRIES — No key — Country data, flags, currencies ✅
 export const REST_COUNTRIES_BASE = 'https://restcountries.com/v3.1';
 
-// 18. IPAPI — No key — IP to city/country/lat-lon
+// 18. IPAPI — No key — IP to city/country/lat-lon ✅
 export const IPAPI_BASE = 'https://ipapi.co/json/';
 
-// 19. NOMINATIM (OpenStreetMap) — No key — Free geocoding
+// 19. NOMINATIM (OpenStreetMap) — No key — Free geocoding ✅
 export const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
 
 // ════════════════════════════════════════════════════════════════
 // 💰 FINANCE & CRYPTO — Free Tiers
 // ════════════════════════════════════════════════════════════════
 
-// 20. COINGECKO — Crypto prices — No key for basic endpoints
+// 20. COINGECKO — Crypto prices — No key for basic endpoints ✅
 export const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 
 // 21. EXCHANGERATE-API — Currency conversion
@@ -149,19 +148,19 @@ export const TMDB_API_KEY = 'YOUR_TMDB_API_KEY';
 export const UNSPLASH_KEY = 'YOUR_UNSPLASH_KEY';
 
 // ════════════════════════════════════════════════════════════════
-// 📚 KNOWLEDGE — NO KEY NEEDED
+// 📚 KNOWLEDGE — NO KEY NEEDED ✅ ALL WORKING
 // ════════════════════════════════════════════════════════════════
 
-// 24. WIKIPEDIA — No key — Full encyclopedia search
+// 24. WIKIPEDIA — No key — Full encyclopedia search ✅
 export const WIKIPEDIA_BASE = 'https://en.wikipedia.org/api/rest_v1';
 
-// 25. DICTIONARY — No key — Word definitions, synonyms
+// 25. DICTIONARY — No key — Word definitions, synonyms ✅
 export const DICTIONARY_BASE = 'https://api.dictionaryapi.dev/api/v2/entries/en';
 
-// 26. OPEN LIBRARY — No key — Books, authors, covers
+// 26. OPEN LIBRARY — No key — Books, authors, covers ✅
 export const OPEN_LIBRARY_BASE = 'https://openlibrary.org';
 
-// 27. QUOTABLE — No key — Inspirational quotes
+// 27. QUOTABLE — No key — Inspirational quotes ✅
 export const QUOTABLE_BASE = 'https://api.quotable.io';
 
 // ════════════════════════════════════════════════════════════════
@@ -182,18 +181,60 @@ export const AVIATIONSTACK_KEY = 'YOUR_AVIATIONSTACK_KEY';
 //     Fastest Whisper inference on earth
 
 // ════════════════════════════════════════════════════════════════
+// 🆕 ZERO-SIGNUP APIs — Added, no accounts needed ✅ ALL WORKING
+// ════════════════════════════════════════════════════════════════
+
+// 30. DUCKDUCKGO — Instant answers, definitions, quick facts ✅
+//     No key. No signup. No rate limit published.
+//     Returns: abstract, answer, related topics, image
+export const DUCKDUCKGO_BASE = 'https://api.duckduckgo.com/?format=json&no_html=1&skip_disambig=1&q=';
+
+// 31. HACKER NEWS — Tech news, trending developer stories ✅
+//     No key. No signup. Firebase-hosted JSON API.
+//     500+ top stories, 200+ new stories, Ask HN, Show HN
+export const HN_BASE = 'https://hacker-news.firebaseio.com/v0';
+
+// 32. GUTENDEX — 70,000+ free public domain books (Project Gutenberg) ✅
+//     No key. No signup. Search by title, author, language, topic.
+export const GUTENDEX_BASE = 'https://gutendex.com/books';
+
+// 33. THE CAT API — Random cat images (personality + engagement) ✅
+//     No key. No signup. Works on every call.
+export const CAT_API_BASE = 'https://api.thecatapi.com/v1/images/search';
+
+// 34. DOG CEO API — Random dog images + all breed data ✅
+//     No key. No signup. 120+ breeds.
+export const DOG_API_BASE = 'https://dog.ceo/api';
+
+// 35. OPENSTREETMAP TILES — Free map tiles, no billing ✅
+//     No key. Replacement for Google Maps tiles.
+//     Usage: replace {z}/{x}/{y} with zoom/tile coordinates
+export const OSM_TILE_BASE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+// 36. USGS EARTHQUAKES — Real-time global earthquake data ✅
+//     No key. No signup. Updated every minute by USGS.
+//     Params: format, starttime, minmagnitude, limit
+export const USGS_BASE = 'https://earthquake.usgs.gov/fdsnws/event/1/query';
+
+// 37. OPEN NOTIFY — Live ISS position + astronauts in space ✅
+//     No key. No signup. Real-time ISS tracking.
+//     /iss-now.json  → current lat/lon of ISS
+//     /astros.json   → who is in space right now
+export const OPEN_NOTIFY_BASE = 'http://api.open-notify.org';
+
+// ════════════════════════════════════════════════════════════════
 // ⚙️ APP SETTINGS
 // ════════════════════════════════════════════════════════════════
 
-export const OWNER_NAME     = 'Michael';
-export const WAKE_WORD      = 'avant';
-export const HOME_ADDRESS   = 'Your Home Address Here';
-export const TIMEZONE       = 'America/Los_Angeles';
+export const OWNER_NAME  = 'Michael';
+export const WAKE_WORD   = 'avant';
+export const HOME_ADDRESS = 'Your Home Address Here';
+export const TIMEZONE    = 'America/Los_Angeles';
 
-// Voice
-export const VOICE_PITCH    = 1.1;   // Feminine, natural
-export const VOICE_RATE     = 0.95;  // Slightly measured
-export const VOICE_LANG     = 'en-US';
+// Voice — natural feminine tone
+export const VOICE_PITCH = 1.1;
+export const VOICE_RATE  = 0.95;
+export const VOICE_LANG  = 'en-US';
 
 // LLM routing priority (fastest → smartest fallback)
-export const LLM_PRIORITY   = ['groq', 'cerebras', 'deepseek', 'gemini', 'mistral', 'together', 'openai'];
+export const LLM_PRIORITY = ['groq', 'cerebras', 'deepseek', 'gemini', 'mistral', 'together', 'openai'];
