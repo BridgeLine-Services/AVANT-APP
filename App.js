@@ -25,6 +25,7 @@ import * as Notifications from 'expo-notifications';
 
 import HomeScreen from './src/screens/HomeScreen';
 import MapScreen  from './src/screens/MapScreen';
+import ARScreen   from './src/screens/ARScreen';
 import { OWNER_NAME } from './src/modules/config';
 
 const Tab   = createBottomTabNavigator();
@@ -103,6 +104,11 @@ function TabNavigator() {
         name="Earth"
         component={MapScreen}
         options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🌍</Text> }}
+      />
+      <Tab.Screen
+        name="Vision"
+        component={ARScreen}
+        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>👁</Text> }}
       />
     </Tab.Navigator>
   );
