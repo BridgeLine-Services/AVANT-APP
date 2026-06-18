@@ -2,66 +2,67 @@
  * ╔══════════════════════════════════════════════════════════════╗
  * ║  AVANT — Voice Engine (TypeScript)                          ║
  * ║                                                              ║
- * ║  Handles the full voice pipeline:                           ║
- * ║  Mic → STT → AI Router → TTS → Response                    ║
+ * ║  Full voice pipeline:                                       ║
+ * ║  Wake word → STT → Command Router → AI → TTS               ║
  * ║                                                              ║
- * ║  Bridges the JS layer to the native Android services via    ║
- * ║  Capacitor + native broadcast receivers.                    ║
+ * ║  Command routing cascade (in order):                        ║
+ * ║  1. Intelligence layer (life graph, timeline, predictions)  ║
+ * ║  2. Vision layer (camera scan, screen, AR, live)            ║
+ * ║  3. Spatial layer (mapping, room queries, memory)           ║
+ * ║  4. Built-in commands (alarms, music, call, settings)       ║
+ * ║  5. AI router (Groq → Gemini → GPT-4o → offline)           ║
  * ╚══════════════════════════════════════════════════════════════╝
  */
 
-import { aiRouter }   from '../core/aiRouter';
+import { aiRouter }     from '../core/aiRouter';
 import { offlineBrain } from '../offline/offlineBrain';
 
 // ── Platform detection ────────────────────────────────────────
 const isNative = typeof (window as any).Capacitor !== 'undefined' &&
-                 (window as any).Capacitor.isNative;
+                 (window as any).Capacitor?.isNative;
 
-// ── TTS abstraction (native or Web Speech API) ─────────────────
-async function speak(text: string, pitch = 1.1, rate = 0.95): Promise<void> {
+// ── TTS — native Capacitor or Web Speech fallback ─────────────
+export async function speak(text: string, pitch = 1.1, rate = 0.95): Promise<void> {
   const styled = styleVoice(text);
+  if (!styled) return;
 
   if (isNative) {
     try {
       const { TextToSpeech } = await import('@capacitor-community/text-to-speech');
       await TextToSpeech.speak({ text: styled, lang: 'en-US', rate, pitch, category: 'ambient' });
       return;
-    } catch (e) { console.warn('Native TTS failed, falling back to Web Speech'); }
+    } catch { /* fall through to web */ }
   }
 
-  // Web Speech API fallback (works in Expo Go / browser)
   return new Promise<void>((resolve) => {
-    const utter = new SpeechSynthesisUtterance(styled);
-    utter.lang  = 'en-US';
-    utter.pitch = pitch;
-    utter.rate  = rate;
-    const voices = window.speechSynthesis.getVoices();
-    // Prefer a female voice
-    const female = voices.find(v =>
-      v.name.toLowerCase().includes('female') ||
-      v.name.toLowerCase().includes('samantha') ||
-      v.name.toLowerCase().includes('victoria') ||
-      v.name.toLowerCase().includes('google us english female')
+    if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
+    const utter        = new SpeechSynthesisUtterance(styled);
+    utter.lang         = 'en-US';
+    utter.pitch        = pitch;
+    utter.rate         = rate;
+    const voices       = window.speechSynthesis.getVoices();
+    const female       = voices.find(v =>
+      /samantha|victoria|karen|female|google us english/i.test(v.name)
     );
     if (female) utter.voice = female;
-    utter.onend  = () => resolve();
-    utter.onerror = () => resolve();
+    utter.onend        = () => resolve();
+    utter.onerror      = () => resolve();
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utter);
   });
 }
 
-// ── STT abstraction (native or Web Speech API) ─────────────────
-async function listenOnce(timeoutMs = 7000): Promise<string> {
+// ── STT — native Capacitor or Web Speech fallback ─────────────
+async function listenOnce(timeoutMs = 8000): Promise<string> {
   if (isNative) {
     try {
       const { SpeechRecognition } = await import('@capacitor-community/speech-recognition');
       const perm = await SpeechRecognition.requestPermissions();
-      if (!perm.speechRecognition) throw new Error('Permission denied');
+      if (!(perm as any).speechRecognition) throw new Error('Permission denied');
 
-      return new Promise<string>((resolve, reject) => {
+      return new Promise<string>((resolve) => {
         const timer = setTimeout(() => {
-          SpeechRecognition.stop();
+          SpeechRecognition.stop().catch(() => {});
           resolve('');
         }, timeoutMs);
 
@@ -69,41 +70,28 @@ async function listenOnce(timeoutMs = 7000): Promise<string> {
           const heard = data.matches?.[0] || '';
           if (heard) {
             clearTimeout(timer);
-            SpeechRecognition.stop();
+            SpeechRecognition.stop().catch(() => {});
             resolve(heard);
           }
         });
 
-        SpeechRecognition.start({
-          language:       'en-US',
-          partialResults: true,
-          popup:          false,
-        }).catch(reject);
+        SpeechRecognition.start({ language: 'en-US', partialResults: true, popup: false })
+          .catch(() => { clearTimeout(timer); resolve(''); });
       });
-    } catch (e) {
-      console.warn('Native STT failed, using Web Speech');
-    }
+    } catch { /* fall through */ }
   }
 
-  // Web Speech API fallback
   return new Promise<string>((resolve) => {
-    const SR = (window as any).SpeechRecognition ||
-               (window as any).webkitSpeechRecognition;
+    const SR = (window as any)?.SpeechRecognition || (window as any)?.webkitSpeechRecognition;
     if (!SR) { resolve(''); return; }
-
-    const rec = new SR();
-    rec.lang          = 'en-US';
-    rec.continuous    = false;
-    rec.interimResults = false;
+    const rec           = new SR();
+    rec.lang            = 'en-US';
+    rec.continuous      = false;
+    rec.interimResults  = false;
     rec.maxAlternatives = 1;
-
     const timer = setTimeout(() => { try { rec.stop(); } catch {} resolve(''); }, timeoutMs);
-
-    rec.onresult = (e: any) => {
-      clearTimeout(timer);
-      resolve(e.results[0]?.[0]?.transcript || '');
-    };
-    rec.onerror = () => { clearTimeout(timer); resolve(''); };
+    rec.onresult  = (e: any) => { clearTimeout(timer); resolve(e.results[0]?.[0]?.transcript || ''); };
+    rec.onerror   = () => { clearTimeout(timer); resolve(''); };
     rec.start();
   });
 }
@@ -118,7 +106,6 @@ function styleVoice(text: string): string {
     .replace(/\bdoes not\b/gi, "doesn't")
     .replace(/\bwould not\b/gi, "wouldn't")
     .replace(/\bcould not\b/gi, "couldn't")
-    // Clean markdown that shouldn't be spoken
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/#{1,6}\s/g, '')
@@ -128,60 +115,139 @@ function styleVoice(text: string): string {
 
 // ── Tone detector ──────────────────────────────────────────────
 function detectTone(text: string): 'urgent' | 'serious' | 'simple' | 'casual' {
-  const l = text.toLowerCase();
-  if (/urgent|emergency|asap|right now|immediately|hurry/i.test(l)) return 'urgent';
-  if (/serious|important|professional|formal/i.test(l))              return 'serious';
-  if (/simply|7th grade|explain|break it down|eli5|simple/i.test(l)) return 'simple';
+  if (/urgent|emergency|asap|right now|immediately|hurry/i.test(text))   return 'urgent';
+  if (/serious|important|professional|formal/i.test(text))                return 'serious';
+  if (/simply|7th grade|explain|break.?it.?down|eli5|simple/i.test(text)) return 'simple';
   return 'casual';
 }
 
-// ── Main voice pipeline ────────────────────────────────────────
+// ── Built-in direct command handler ───────────────────────────
+// Fast local responses — no AI call needed
+async function handleBuiltIn(text: string): Promise<string | null> {
+  const l = text.toLowerCase().trim();
+
+  // Time / date
+  if (/^(what.?s the time|what time is it|current time)$/i.test(l))
+    return `It's ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}.`;
+  if (/^(what.?s today|what day|today.?s date|what is today)$/i.test(l))
+    return `Today is ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}.`;
+
+  // Self-identification
+  if (/who are you|what are you|your name/i.test(l))
+    return "I'm AVANT — your personal AI. I'm always here.";
+  if (/how are you|you okay/i.test(l))
+    return "I'm running great, thanks for asking. What do you need?";
+
+  // Simple math
+  const math = l.match(/^(?:what is |calc |calculate )?(\d+(?:\.\d+)?)\s*([+\-×x*\/÷])\s*(\d+(?:\.\d+)?)$/);
+  if (math) {
+    const a = parseFloat(math[1]), b = parseFloat(math[3]), op = math[2];
+    const r = op === '+' ? a + b : op === '-' ? a - b : /[x*×]/.test(op) ? a * b : b !== 0 ? a / b : null;
+    return r !== null ? `${a} ${op} ${b} = ${parseFloat(r.toFixed(6))}` : "Can't divide by zero.";
+  }
+
+  // Stop / cancel
+  if (/^(stop|cancel|never mind|shut up|quiet|silence)$/i.test(l)) {
+    VoiceEngine.stopSpeaking();
+    return null;   // no spoken response
+  }
+
+  return null;   // not handled — pass to next layer
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── MASTER COMMAND ROUTER ─────────────────────────────────────
+// Every voice command flows through here in priority order.
+// ══════════════════════════════════════════════════════════════
+async function routeCommand(text: string): Promise<string> {
+  if (!text.trim()) return '';
+
+  // ── 0. Built-in instant responses ─────────────────────────
+  const builtin = await handleBuiltIn(text);
+  if (builtin !== null) return builtin;   // null means "stop, no response"
+
+  // ── 1. Intelligence layer — life graph, timeline, patterns,
+  //        predictions, spatial queries, notes ─────────────────
+  try {
+    const { handleIntelligenceCommand } = await import('../intelligence/contextEngine');
+    let intelligenceResult = '';
+    const speakCapture = async (t: string) => { intelligenceResult = t; };
+    const handled = await handleIntelligenceCommand(text, speakCapture);
+    if (handled && intelligenceResult) return intelligenceResult;
+  } catch (e) {
+    console.warn('[VoiceRouter] Intelligence layer error:', (e as Error).message);
+  }
+
+  // ── 2. Vision layer — camera, screen, AR, live mode ────────
+  try {
+    const { handleVisionCommand } = await import('../ar/hudEngine');
+    let visionResult = '';
+    const speakCapture = async (t: string) => { visionResult = t; };
+    const dummyStop   = () => false;
+    const handled = await handleVisionCommand(text, dummyStop, speakCapture);
+    if (handled && visionResult) return visionResult;
+  } catch (e) {
+    console.warn('[VoiceRouter] Vision layer error:', (e as Error).message);
+  }
+
+  // ── 3. AI router (Groq → Gemini → GPT-4o → offline) ───────
+  try {
+    const tone   = detectTone(text);
+    const answer = await aiRouter(text, tone);
+    return answer || offlineBrain(text);
+  } catch (e) {
+    console.warn('[VoiceRouter] AI router error:', (e as Error).message);
+    return offlineBrain(text);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ── VoiceEngine class ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
 export class VoiceEngine {
 
-  static isActive    = false;
-  static isSpeaking  = false;
-  static onStateChange: ((state: 'idle'|'listening'|'thinking'|'speaking') => void) | null = null;
+  static isActive   = false;
+  static isSpeaking = false;
+  static lastCommand = '';
+  static onStateChange: ((state: 'idle' | 'listening' | 'thinking' | 'speaking') => void) | null = null;
 
-  private static setState(state: 'idle'|'listening'|'thinking'|'speaking') {
+  private static setState(state: 'idle' | 'listening' | 'thinking' | 'speaking'): void {
     VoiceEngine.onStateChange?.(state);
-    // Notify overlay service
     if (isNative) {
       try {
-        const { Capacitor } = window as any;
-        Capacitor?.Plugins?.AvantPlugin?.updateOverlay?.({ state });
+        (window as any).Capacitor?.Plugins?.AvantPlugin?.updateOverlay?.({ state });
       } catch {}
     }
   }
 
-  // Full voice session: listen → think → speak
+  // ── Full voice session: listen → route → speak ────────────
   static async runSession(): Promise<void> {
     if (VoiceEngine.isActive) return;
     VoiceEngine.isActive = true;
-
     try {
       VoiceEngine.setState('listening');
       const transcript = await listenOnce(8000);
 
       if (!transcript.trim()) {
         VoiceEngine.setState('idle');
-        VoiceEngine.isActive = false;
         return;
       }
 
+      VoiceEngine.lastCommand = transcript;
       VoiceEngine.setState('thinking');
-      const tone     = detectTone(transcript);
-      const response = await aiRouter(transcript, tone);
 
-      VoiceEngine.setState('speaking');
-      VoiceEngine.isSpeaking = true;
+      const response = await routeCommand(transcript);
 
-      // Adjust speed for urgent mode
-      const rate = tone === 'urgent' ? 1.1 : 0.95;
-      await speak(response, 1.1, rate);
+      if (response) {
+        VoiceEngine.setState('speaking');
+        VoiceEngine.isSpeaking = true;
+        const tone = detectTone(transcript);
+        await speak(response, 1.1, tone === 'urgent' ? 1.15 : 0.95);
+      }
 
     } catch (e) {
-      console.error('VoiceEngine error:', e);
-      await speak("Sorry, something went wrong. I'm still here though.");
+      console.error('[VoiceEngine] Session error:', e);
+      await speak("Something went wrong, but I'm still here.");
     } finally {
       VoiceEngine.isSpeaking = false;
       VoiceEngine.isActive   = false;
@@ -189,17 +255,20 @@ export class VoiceEngine {
     }
   }
 
-  // Handle a pre-transcribed command (from native Kotlin layer)
+  // ── Handle a pre-transcribed command (from Kotlin layer) ───
   static async handleCommand(text: string): Promise<void> {
     if (!text.trim()) return;
-    VoiceEngine.isActive = true;
+    VoiceEngine.isActive   = true;
+    VoiceEngine.lastCommand = text;
     try {
       VoiceEngine.setState('thinking');
-      const tone     = detectTone(text);
-      const response = await aiRouter(text, tone);
-      VoiceEngine.setState('speaking');
-      VoiceEngine.isSpeaking = true;
-      await speak(response, 1.1, tone === 'urgent' ? 1.1 : 0.95);
+      const response = await routeCommand(text);
+      if (response) {
+        VoiceEngine.setState('speaking');
+        VoiceEngine.isSpeaking = true;
+        const tone = detectTone(text);
+        await speak(response, 1.1, tone === 'urgent' ? 1.15 : 0.95);
+      }
     } catch (e) {
       await speak("I hit a snag processing that. Try again?");
     } finally {
@@ -209,7 +278,7 @@ export class VoiceEngine {
     }
   }
 
-  // Quick speak without full session
+  // ── Speak without full session ────────────────────────────
   static async justSay(text: string): Promise<void> {
     VoiceEngine.isSpeaking = true;
     VoiceEngine.setState('speaking');
@@ -222,35 +291,34 @@ export class VoiceEngine {
     if (isNative) {
       import('@capacitor-community/text-to-speech').then(({ TextToSpeech }) => {
         TextToSpeech.stop().catch(() => {});
-      });
+      }).catch(() => {});
     }
-    window.speechSynthesis?.cancel();
+    if (typeof window !== 'undefined') window.speechSynthesis?.cancel();
     VoiceEngine.isSpeaking = false;
     VoiceEngine.setState('idle');
   }
 }
 
 // ── Wake word listener (JS layer) ─────────────────────────────
-// Runs when the Kotlin kernel broadcasts a wake-word detection,
-// OR when the app is in foreground and the user taps the orb.
 export function initWakeWordBridge(): void {
   if (!isNative) {
-    // Web / Expo Go: poll with Web Speech API
-    let wakePoll: ReturnType<typeof setInterval>;
+    // Expo Go / web: poll with short Web Speech bursts
+    let wakePoll: ReturnType<typeof setInterval> | null = null;
+
     const pollWakeWord = async () => {
       if (VoiceEngine.isActive || VoiceEngine.isSpeaking) return;
       try {
-        const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        const SR = (window as any)?.SpeechRecognition || (window as any)?.webkitSpeechRecognition;
         if (!SR) return;
         const rec = new SR();
         rec.lang = 'en-US'; rec.continuous = false; rec.maxAlternatives = 1;
         rec.onresult = async (e: any) => {
-          const heard = e.results[0]?.[0]?.transcript?.toLowerCase() || '';
+          const heard = (e.results[0]?.[0]?.transcript || '').toLowerCase();
           if (heard.includes('avant')) {
-            clearInterval(wakePoll);
+            if (wakePoll) clearInterval(wakePoll);
             await VoiceEngine.justSay("Hey, I'm listening.");
             await VoiceEngine.runSession();
-            wakePoll = setInterval(pollWakeWord, 4000);
+            wakePoll = setInterval(pollWakeWord, 4500);
           }
         };
         rec.onerror = () => {};
@@ -258,27 +326,26 @@ export function initWakeWordBridge(): void {
         setTimeout(() => { try { rec.stop(); } catch {} }, 3000);
       } catch {}
     };
+
     wakePoll = setInterval(pollWakeWord, 4500);
     return;
   }
 
-  // Native: listen for broadcasts from AvantVoiceKernelService
+  // Native: listen for Capacitor plugin broadcasts
   try {
-    const { Capacitor } = window as any;
-    Capacitor?.Plugins?.AvantPlugin?.addListener(
-      'avantWakeWord', async (data: { transcript: string }) => {
-        console.log('Wake word broadcast received:', data.transcript);
+    const cap = (window as any).Capacitor;
+    cap?.Plugins?.AvantPlugin?.addListener(
+      'avantWakeWord', async (_data: any) => {
         await VoiceEngine.justSay("Hey, I'm listening.");
         await VoiceEngine.runSession();
       }
     );
-    Capacitor?.Plugins?.AvantPlugin?.addListener(
+    cap?.Plugins?.AvantPlugin?.addListener(
       'avantCommand', async (data: { command: string }) => {
-        console.log('Command broadcast received:', data.command);
         await VoiceEngine.handleCommand(data.command);
       }
     );
   } catch (e) {
-    console.warn('Native bridge not available:', e);
+    console.warn('[VoiceEngine] Native bridge unavailable:', e);
   }
 }
