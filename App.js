@@ -25,7 +25,8 @@ import * as Notifications from 'expo-notifications';
 
 import HomeScreen from './src/screens/HomeScreen';
 import MapScreen  from './src/screens/MapScreen';
-import ARScreen   from './src/screens/ARScreen';
+import ARScreen      from './src/screens/ARScreen';
+import SpatialScreen from './src/screens/SpatialScreen';
 import { OWNER_NAME } from './src/modules/config';
 
 const Tab   = createBottomTabNavigator();
@@ -110,6 +111,11 @@ function TabNavigator() {
         component={ARScreen}
         options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>👁</Text> }}
       />
+      <Tab.Screen
+        name="Spatial"
+        component={SpatialScreen}
+        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🧠</Text> }}
+      />
     </Tab.Navigator>
   );
 }
@@ -146,7 +152,12 @@ export default function App() {
       // 4. Init JS wake word bridge (fallback / web mode)
       initWakeBridge();
 
-      // 5. Brief pause then greet
+      // 5. Init spatial memory (loads persisted graph from AsyncStorage)
+      import('./spatial/spatialEngine').then(({ initSpatialEngine }) => {
+        initSpatialEngine().catch(e => console.log('Spatial init:', e.message));
+      }).catch(() => {});
+
+      // 6. Brief pause then greet
       await new Promise(r => setTimeout(r, 1200));
       const hour = new Date().getHours();
       const greeting =
