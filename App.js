@@ -152,10 +152,20 @@ export default function App() {
       // 4. Init JS wake word bridge (fallback / web mode)
       initWakeBridge();
 
-      // 5. Init spatial memory (loads persisted graph from AsyncStorage)
-      import('./spatial/spatialEngine').then(({ initSpatialEngine }) => {
-        initSpatialEngine().catch(e => console.log('Spatial init:', e.message));
-      }).catch(() => {});
+      // 5. Init full intelligence layer (life graph + timeline + patterns + spatial)
+      import('./intelligence/contextEngine').then(({ initContextEngine }) => {
+        initContextEngine().catch(e => {
+          console.log('Intelligence init:', e.message);
+          // Fallback: spatial engine only
+          import('./spatial/spatialEngine').then(({ initSpatialEngine }) => {
+            initSpatialEngine().catch(() => {});
+          }).catch(() => {});
+        });
+      }).catch(() => {
+        import('./spatial/spatialEngine').then(({ initSpatialEngine }) => {
+          initSpatialEngine().catch(() => {});
+        }).catch(() => {});
+      });
 
       // 6. Brief pause then greet
       await new Promise(r => setTimeout(r, 1200));
