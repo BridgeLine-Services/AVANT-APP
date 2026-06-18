@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AVANT Accessibility Service Configuration
+    Tells Android what events this service listens to,
+    what UI feedback it provides, and how it behaves.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+
+    android:description="@string/accessibility_service_description"
+
+    android:accessibilityEventTypes="
+        typeWindowStateChanged|
+        typeWindowContentChanged|
+        typeNotificationStateChanged|
+        typeViewClicked|
+        typeViewFocused"
+
+    android:accessibilityFeedbackType="feedbackGeneric"
+
+    android:accessibilityFlags="
+        flagReportViewIds|
+        flagRetrieveInteractiveWindows|
+        flagRequestFilterKeyEvents"
+
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="false"
+    android:notificationTimeout="300"
+    android:settingsActivity=".MainActivity" />
