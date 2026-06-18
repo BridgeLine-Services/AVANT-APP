@@ -43,7 +43,8 @@
     "@capacitor-community/text-to-speech": "^5.0.0",
     "@capacitor/camera": "^6.0.0",
     "expo-camera": "~16.0.18",
-    "html2canvas": "^1.4.1"
+    "html2canvas": "^1.4.1",
+    "@react-native-async-storage/async-storage": "^2.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
