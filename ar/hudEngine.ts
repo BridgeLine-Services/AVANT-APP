@@ -256,5 +256,10 @@ export async function handleVisionCommand(
     return true;
   }
 
-  return false; // not a vision command — let regular AI handle it
+  // ── Delegate spatial commands ─────────────────────────────
+  const { handleSpatialCommand } = await import('../spatial/spatialEngine');
+  const spatialHandled = await handleSpatialCommand(command, stopSignal, speak);
+  if (spatialHandled) return true;
+
+  return false; // not a vision or spatial command — let regular AI handle it
 }
