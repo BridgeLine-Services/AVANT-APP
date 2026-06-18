@@ -48,6 +48,14 @@
     <!-- Keep CPU awake during voice processing -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Camera & Vision (AVANT AR + Vision modes) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera"          android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- Screen Capture — requires runtime user consent (MediaProjection) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
     <!-- Disable battery optimization (request) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -151,6 +159,15 @@
                 <action android:name="android.intent.action.NEW_OUTGOING_CALL" />
             </intent-filter>
         </receiver>
+
+
+        <!-- ══ SCREEN CAPTURE SERVICE ═══════════════════
+             Requires runtime user consent via MediaProjection.
+             Android shows a mandatory OS dialog — cannot be bypassed. -->
+        <service
+            android:name=".AvantScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
     </application>
 
