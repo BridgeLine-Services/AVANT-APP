@@ -13,7 +13,11 @@
     "cap:sync": "npx cap sync android",
     "cap:open": "npx cap open android",
     "cap:build": "npm run build && npx cap sync android && npx cap open android",
-    "tsc": "tsc --noEmit"
+    "tsc": "tsc --noEmit",
+    "web": "expo start --web",
+    "build:web": "expo export --platform web",
+    "build:vercel": "expo export --platform web --output-dir dist",
+    "build": "expo export --platform web --output-dir dist"
   },
   "dependencies": {
     "expo": "~52.0.0",
