@@ -44,13 +44,7 @@
       "expo-contacts",
       "expo-calendar",
       "expo-location",
-      "expo-notifications",
-      [
-        "expo-speech",
-        {
-          "useMicrophone": true
-        }
-      ]
+      "expo-notifications"
     ],
     "web": {
       "bundler": "metro",
