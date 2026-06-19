@@ -13,7 +13,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/icon.png",
+        "foregroundImage": "./src/assets/adaptive-icon.png",
         "backgroundColor": "#050510"
       },
       "package": "com.bridgeline.avant",
@@ -52,15 +52,10 @@
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "avant-bridgeline-001"
-      }
-    },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./src/assets/icon.png"
+      "favicon": "./src/assets/favicon.png"
     },
     "platforms": [
       "android",
