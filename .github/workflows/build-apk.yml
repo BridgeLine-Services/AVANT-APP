@@ -16,11 +16,10 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. Node + Java ───────────────────────────────────────
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -35,6 +34,15 @@ jobs:
       # ── 4. Install dependencies ───────────────────────────────
       - name: Install npm packages
         run: npm install --legacy-peer-deps
+
+      # ── 4b. Cache node_modules ───────────────────────────────
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
       # ── 5. Expo prebuild → generates /android folder ─────────
       - name: Expo prebuild (generate Android project)
