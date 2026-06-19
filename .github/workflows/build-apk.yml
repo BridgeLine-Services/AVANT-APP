@@ -52,26 +52,17 @@ jobs:
           NODE_OPTIONS: --no-experimental-fetch
 
       # ── 7. Fix Kotlin/Compose compatibility ───────────────────
-      # Compose Compiler 1.5.15 requires Kotlin 1.9.25 but expo prebuild
-      # generates 1.9.24. We suppress the check AND patch every occurrence.
-      - name: Patch Kotlin/Compose compatibility
+      # build.gradle:9 already does: findProperty('android.kotlinVersion') ?: '1.9.25'
+      # So setting android.kotlinVersion=1.9.25 in gradle.properties is the correct override.
+      # The Compose Compiler 1.5.15 needs exactly 1.9.25 — expo-modules-core ships 1.9.24.
+      - name: Inject Kotlin 1.9.25 via gradle.properties
         run: |
-          echo "=== Before patch: kotlin version lines ==="
-          grep -rn "1\.9\.2[0-9]" android/ --include="*.gradle" --include="*.properties" || true
-
-          # Patch all gradle files — try every format expo might generate
-          find android -name "*.gradle" -o -name "*.gradle.kts" | xargs grep -l "1\.9\.24" 2>/dev/null | while read f; do
-            echo "Patching $f"
-            sed -i 's/1\.9\.24/1.9.25/g' "$f"
-          done
-
-          # Also add suppressKotlinVersionCompatibilityCheck to gradle.properties as a safety net
           echo "" >> android/gradle.properties
-          echo "# Suppress Compose/Kotlin version mismatch warning" >> android/gradle.properties
-          echo "kotlin.suppressKotlinVersionCompatibilityCheck=1.9.24" >> android/gradle.properties
-
-          echo "=== After patch ==="
-          grep -rn "1\.9\.2[0-9]\|suppressKotlin" android/ --include="*.gradle" --include="*.properties" || true
+          echo "# Force Kotlin 1.9.25 — Compose Compiler 1.5.15 requires it" >> android/gradle.properties
+          echo "android.kotlinVersion=1.9.25" >> android/gradle.properties
+          echo "kotlin.suppressKotlinVersionCompatibilityCheck=1.9.25" >> android/gradle.properties
+          echo "=== gradle.properties tail ==="
+          tail -6 android/gradle.properties
 
       # ── 8. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
