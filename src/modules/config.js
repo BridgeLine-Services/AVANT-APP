@@ -31,6 +31,26 @@ export const MISTRAL_API_KEY    = 'YOUR_MISTRAL_API_KEY';
 // 🔑 OPENAI GPT-4o — Sign up: https://platform.openai.com
 export const OPENAI_API_KEY     = 'YOUR_OPENAI_API_KEY';
 
+// ─────────────────────────────────────────────────────────────
+// 🔑 NEW ZERO-BUDGET AI STACK (2025+)
+// ─────────────────────────────────────────────────────────────
+
+// 🔑 OPENROUTER — One key, 4 models: Gemini / DeepSeek / Qwen / Llama
+// Sign up FREE: https://openrouter.ai
+// Free credits on signup. Models: Gemini 2.5 Pro, DeepSeek R1/V3, Qwen 3, Llama 4
+// Used as Tier 2 fallback when direct keys are unavailable
+export const OPENROUTER_API_KEY = 'YOUR_OPENROUTER_API_KEY';
+
+// 🔑 HUGGING FACE — Embeddings, intent classification, sentiment, summarization
+// Sign up FREE: https://huggingface.co → Settings → Access Tokens
+// Used for: memory search, command routing, document analysis (saves AI credits)
+export const HUGGINGFACE_API_KEY = 'YOUR_HUGGINGFACE_API_KEY';
+
+// 🔑 JINA AI — Web reader, search, embeddings
+// Sign up FREE: https://jina.ai/?sui=apikey (1M tokens/month free)
+// Used for: webpage extraction, article reading, web research, search augmentation
+export const JINA_API_KEY = 'YOUR_JINA_API_KEY';
+
 // ════════════════════════════════════════════════════════════════
 // 🔍 SEARCH — Optional keys (SearXNG + DuckDuckGo work without)
 // ════════════════════════════════════════════════════════════════
@@ -197,4 +217,11 @@ export const VOICE_RATE   = 0.95;
 export const VOICE_LANG   = 'en-US';
 
 // LLM cascade — skips any engine whose key is not set
-export const LLM_PRIORITY = ['groq', 'cerebras', 'deepseek', 'gemini', 'mistral', 'together', 'openai'];
+export const LLM_PRIORITY = [
+  // Tier 1 — direct keys (configure any/all):
+  'groq', 'cerebras', 'deepseek', 'gemini', 'mistral', 'together', 'openai',
+  // Tier 2 — OpenRouter (single key → Gemini/DeepSeek/Qwen/Llama cascade):
+  'openrouter',
+  // Tier 3 — always available:
+  'offline',
+];
