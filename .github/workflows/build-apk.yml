@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node 18 (Expo 52 official support) ────────────────
+      # ── 2. Node 18 ───────────────────────────────────────────
       - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
@@ -44,39 +44,34 @@ jobs:
       - name: Install npm packages
         run: npm install --legacy-peer-deps
 
-      # ── 6. Expo prebuild → generates /android folder ─────────
+      # ── 6. ROOT CAUSE FIX ────────────────────────────────────
+      # Deep investigation revealed the actual source of Kotlin 1.9.24:
+      #
+      # @react-native/gradle-plugin (inside node_modules) ships its own
+      # gradle/libs.versions.toml with:  kotlin = "1.9.24"
+      # This file is used to compile the gradle-plugin subproject that is
+      # included directly in the Android build via settings.gradle.
+      # That compiled plugin loads kotlin-gradle-plugin 1.9.24 into the
+      # Gradle classpath — making 1.9.24 the ACTUAL compiler, regardless
+      # of what ext.kotlinVersion says.
+      #
+      # Compose Compiler 1.5.15 (in expo-modules-core 2.2.3) requires 1.9.25.
+      # Fix: patch libs.versions.toml before prebuild runs.
+      - name: Patch @react-native/gradle-plugin kotlin version 1.9.24 → 1.9.25
+        run: |
+          TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
+          echo "=== Before patch ==="
+          cat "$TOML"
+          sed -i 's/kotlin = "1\.9\.24"/kotlin = "1.9.25"/' "$TOML"
+          echo "=== After patch ==="
+          cat "$TOML"
+
+      # ── 7. Expo prebuild → generates /android folder ─────────
       - name: Expo prebuild (generate Android project)
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
-
-      # ── 7. Inject kotlinVersion into rootProject.ext ─────────
-      # Root cause (confirmed by reading ExpoModulesCorePlugin.gradle source):
-      #   kotlinVersion() checks rootProject.ext.has("kotlinVersion").
-      #   If not found, it falls back to "1.9.24".
-      #   Compose Compiler 1.5.15 (bundled with expo-modules-core 2.2.3) needs 1.9.25.
-      #   android/build.gradle uses findProperty('android.kotlinVersion') which goes
-      #   into a different namespace — rootProject.ext never gets set, so the fallback wins.
-      # Fix: prepend ext.kotlinVersion = "1.9.25" to android/build.gradle so
-      #   rootProject.ext.has("kotlinVersion") returns true with the right value.
-      - name: Inject kotlinVersion=1.9.25 into rootProject.ext
-        run: |
-          echo "=== Current android/build.gradle head ==="
-          head -15 android/build.gradle
-
-          # Prepend the ext block before anything else in build.gradle
-          python3 - << 'PYEOF'
-          with open('android/build.gradle', 'r') as f:
-              content = f.read()
-          inject = '// Injected by CI: force Kotlin 1.9.25 for Compose Compiler 1.5.15 compatibility\next.kotlinVersion = "1.9.25"\n\n'
-          with open('android/build.gradle', 'w') as f:
-              f.write(inject + content)
-          print("Done - injected ext.kotlinVersion = 1.9.25")
-          PYEOF
-
-          echo "=== After injection: android/build.gradle head ==="
-          head -10 android/build.gradle
 
       # ── 8. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
@@ -97,7 +92,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── 11. Print download instructions ───────────────────────
+      # ── 11. Done ──────────────────────────────────────────────
       - name: APK build complete
         run: |
           echo "✅ AVANT APK built successfully"
