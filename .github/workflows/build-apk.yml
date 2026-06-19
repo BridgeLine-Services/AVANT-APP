@@ -15,11 +15,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node + Java ───────────────────────────────────────
-      - name: Set up Node.js 20
+      # ── 2. Node 18 (Expo 52 official support) ────────────────
+      - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -31,37 +31,37 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # ── 4. Install dependencies ───────────────────────────────
-      - name: Install npm packages
-        run: npm install --legacy-peer-deps
-
-      # ── 4b. Cache node_modules ───────────────────────────────
+      # ── 4. Cache node_modules ─────────────────────────────────
       - name: Cache node_modules
         uses: actions/cache@v4
         with:
           path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-node18-${{ hashFiles('package.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-node18-
 
-      # ── 5. Expo prebuild → generates /android folder ─────────
+      # ── 5. Install dependencies ───────────────────────────────
+      - name: Install npm packages
+        run: npm install --legacy-peer-deps
+
+      # ── 6. Expo prebuild → generates /android folder ─────────
       - name: Expo prebuild (generate Android project)
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_GIT_STATUS: 1
 
-      # ── 6. Make gradlew executable ────────────────────────────
+      # ── 7. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # ── 7. Build debug APK ────────────────────────────────────
+      # ── 8. Build debug APK ────────────────────────────────────
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
         env:
           GRADLE_OPTS: '-Xmx4g -XX:MaxMetaspaceSize=512m'
 
-      # ── 8. Upload APK as artifact ─────────────────────────────
+      # ── 9. Upload APK as artifact ─────────────────────────────
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -69,7 +69,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── 9. Print download instructions ───────────────────────
+      # ── 10. Print download instructions ──────────────────────
       - name: APK build complete
         run: |
           echo "✅ AVANT APK built successfully"
