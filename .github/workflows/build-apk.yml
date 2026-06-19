@@ -51,18 +51,27 @@ jobs:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
 
-      # ── 7. Make gradlew executable ────────────────────────────
+      # ── 7. Patch Kotlin version to 1.9.25 ────────────────────
+      # Compose Compiler 1.5.15 requires exactly 1.9.25; prebuild generates 1.9.24
+      - name: Patch Kotlin version in build.gradle
+        run: |
+          sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/' android/build.gradle
+          sed -i 's/kotlin_version = "1.9.24"/kotlin_version = "1.9.25"/' android/build.gradle
+          sed -i "s/kotlin_version = '1.9.24'/kotlin_version = '1.9.25'/" android/build.gradle
+          grep -n "kotlin" android/build.gradle | head -10 || echo "No kotlin version line found (may already be correct)"
+
+      # ── 8. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # ── 8. Build debug APK ────────────────────────────────────
+      # ── 9. Build debug APK ────────────────────────────────────
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
         env:
           GRADLE_OPTS: '-Xmx4g -XX:MaxMetaspaceSize=512m'
 
-      # ── 9. Upload APK as artifact ─────────────────────────────
+      # ── 10. Upload APK as artifact ────────────────────────────
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -70,7 +79,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── 10. Print download instructions ──────────────────────
+      # ── 11. Print download instructions ───────────────────────
       - name: APK build complete
         run: |
           echo "✅ AVANT APK built successfully"
