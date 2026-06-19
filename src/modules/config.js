@@ -11,10 +11,10 @@
 // ⚡ AI BRAINS — Optional keys (cascade — uses whichever is set)
 // ════════════════════════════════════════════════════════════════
 // 🔑 GROQ — Sign up: https://console.groq.com (free, fastest)
-export const GROQ_API_KEY       = 'YOUR_GROQ_API_KEY';
+export const GROQ_API_KEY       = (typeof process !== 'undefined' && process.env?.GROQ_API_KEY) || 'YOUR_GROQ_API_KEY';
 
 // 🔑 GEMINI — Sign up: https://aistudio.google.com/apikey
-export const GEMINI_API_KEY     = 'YOUR_GEMINI_API_KEY';
+export const GEMINI_API_KEY     = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || 'YOUR_GEMINI_API_KEY';
 
 // 🔑 DEEPSEEK — Sign up: https://platform.deepseek.com
 export const DEEPSEEK_API_KEY   = 'YOUR_DEEPSEEK_API_KEY';
@@ -29,7 +29,7 @@ export const TOGETHER_API_KEY   = 'YOUR_TOGETHER_API_KEY';
 export const MISTRAL_API_KEY    = 'YOUR_MISTRAL_API_KEY';
 
 // 🔑 OPENAI GPT-4o — Sign up: https://platform.openai.com
-export const OPENAI_API_KEY     = 'YOUR_OPENAI_API_KEY';
+export const OPENAI_API_KEY     = (typeof process !== 'undefined' && process.env?.OPENAI_API_KEY) || 'YOUR_OPENAI_API_KEY';
 
 // ─────────────────────────────────────────────────────────────
 // 🔑 NEW ZERO-BUDGET AI STACK (2025+)
@@ -39,7 +39,7 @@ export const OPENAI_API_KEY     = 'YOUR_OPENAI_API_KEY';
 // Sign up FREE: https://openrouter.ai
 // Free credits on signup. Models: Gemini 2.5 Pro, DeepSeek R1/V3, Qwen 3, Llama 4
 // Used as Tier 2 fallback when direct keys are unavailable
-export const OPENROUTER_API_KEY = 'YOUR_OPENROUTER_API_KEY';
+export const OPENROUTER_API_KEY = (typeof process !== 'undefined' && process.env?.OPENROUTER_API_KEY) || 'YOUR_OPENROUTER_API_KEY';
 
 // 🔑 HUGGING FACE — Embeddings, intent classification, sentiment, summarization
 // Sign up FREE: https://huggingface.co → Settings → Access Tokens
@@ -49,13 +49,13 @@ export const HUGGINGFACE_API_KEY = 'YOUR_HUGGINGFACE_API_KEY';
 // 🔑 JINA AI — Web reader, search, embeddings
 // Sign up FREE: https://jina.ai/?sui=apikey (1M tokens/month free)
 // Used for: webpage extraction, article reading, web research, search augmentation
-export const JINA_API_KEY = 'YOUR_JINA_API_KEY';
+export const JINA_API_KEY = (typeof process !== 'undefined' && process.env?.JINA_API_KEY) || 'YOUR_JINA_API_KEY';
 
 // ════════════════════════════════════════════════════════════════
 // 🔍 SEARCH — Optional keys (SearXNG + DuckDuckGo work without)
 // ════════════════════════════════════════════════════════════════
 // 🔑 SERPAPI — Sign up: https://serpapi.com (100/month free)
-export const SERPAPI_KEY        = 'YOUR_SERPAPI_KEY';
+export const SERPAPI_KEY        = (typeof process !== 'undefined' && process.env?.SERPAPI_KEY) || 'YOUR_SERPAPI_KEY';
 
 // 🔑 SERPER.DEV — Sign up: https://serper.dev (2,500 free lifetime)
 export const SERPER_API_KEY     = 'YOUR_SERPER_API_KEY';
