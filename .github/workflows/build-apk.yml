@@ -51,14 +51,27 @@ jobs:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
 
-      # ── 7. Patch Kotlin version to 1.9.25 ────────────────────
-      # Compose Compiler 1.5.15 requires exactly 1.9.25; prebuild generates 1.9.24
-      - name: Patch Kotlin version in build.gradle
+      # ── 7. Fix Kotlin/Compose compatibility ───────────────────
+      # Compose Compiler 1.5.15 requires Kotlin 1.9.25 but expo prebuild
+      # generates 1.9.24. We suppress the check AND patch every occurrence.
+      - name: Patch Kotlin/Compose compatibility
         run: |
-          sed -i 's/kotlinVersion = "1.9.24"/kotlinVersion = "1.9.25"/' android/build.gradle
-          sed -i 's/kotlin_version = "1.9.24"/kotlin_version = "1.9.25"/' android/build.gradle
-          sed -i "s/kotlin_version = '1.9.24'/kotlin_version = '1.9.25'/" android/build.gradle
-          grep -n "kotlin" android/build.gradle | head -10 || echo "No kotlin version line found (may already be correct)"
+          echo "=== Before patch: kotlin version lines ==="
+          grep -rn "1\.9\.2[0-9]" android/ --include="*.gradle" --include="*.properties" || true
+
+          # Patch all gradle files — try every format expo might generate
+          find android -name "*.gradle" -o -name "*.gradle.kts" | xargs grep -l "1\.9\.24" 2>/dev/null | while read f; do
+            echo "Patching $f"
+            sed -i 's/1\.9\.24/1.9.25/g' "$f"
+          done
+
+          # Also add suppressKotlinVersionCompatibilityCheck to gradle.properties as a safety net
+          echo "" >> android/gradle.properties
+          echo "# Suppress Compose/Kotlin version mismatch warning" >> android/gradle.properties
+          echo "kotlin.suppressKotlinVersionCompatibilityCheck=1.9.24" >> android/gradle.properties
+
+          echo "=== After patch ==="
+          grep -rn "1\.9\.2[0-9]\|suppressKotlin" android/ --include="*.gradle" --include="*.properties" || true
 
       # ── 8. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
