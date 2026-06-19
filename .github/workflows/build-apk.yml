@@ -3,7 +3,7 @@ name: Build AVANT APK
 on:
   push:
     branches: [main]
-  workflow_dispatch:   # lets you trigger manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build-apk:
@@ -51,18 +51,32 @@ jobs:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
 
-      # ── 7. Fix Kotlin/Compose compatibility ───────────────────
-      # build.gradle:9 already does: findProperty('android.kotlinVersion') ?: '1.9.25'
-      # So setting android.kotlinVersion=1.9.25 in gradle.properties is the correct override.
-      # The Compose Compiler 1.5.15 needs exactly 1.9.25 — expo-modules-core ships 1.9.24.
-      - name: Inject Kotlin 1.9.25 via gradle.properties
+      # ── 7. Inject kotlinVersion into rootProject.ext ─────────
+      # Root cause (confirmed by reading ExpoModulesCorePlugin.gradle source):
+      #   kotlinVersion() checks rootProject.ext.has("kotlinVersion").
+      #   If not found, it falls back to "1.9.24".
+      #   Compose Compiler 1.5.15 (bundled with expo-modules-core 2.2.3) needs 1.9.25.
+      #   android/build.gradle uses findProperty('android.kotlinVersion') which goes
+      #   into a different namespace — rootProject.ext never gets set, so the fallback wins.
+      # Fix: prepend ext.kotlinVersion = "1.9.25" to android/build.gradle so
+      #   rootProject.ext.has("kotlinVersion") returns true with the right value.
+      - name: Inject kotlinVersion=1.9.25 into rootProject.ext
         run: |
-          echo "" >> android/gradle.properties
-          echo "# Force Kotlin 1.9.25 — Compose Compiler 1.5.15 requires it" >> android/gradle.properties
-          echo "android.kotlinVersion=1.9.25" >> android/gradle.properties
-          echo "kotlin.suppressKotlinVersionCompatibilityCheck=1.9.25" >> android/gradle.properties
-          echo "=== gradle.properties tail ==="
-          tail -6 android/gradle.properties
+          echo "=== Current android/build.gradle head ==="
+          head -15 android/build.gradle
+
+          # Prepend the ext block before anything else in build.gradle
+          python3 - << 'PYEOF'
+          with open('android/build.gradle', 'r') as f:
+              content = f.read()
+          inject = '// Injected by CI: force Kotlin 1.9.25 for Compose Compiler 1.5.15 compatibility\next.kotlinVersion = "1.9.25"\n\n'
+          with open('android/build.gradle', 'w') as f:
+              f.write(inject + content)
+          print("Done - injected ext.kotlinVersion = 1.9.25")
+          PYEOF
+
+          echo "=== After injection: android/build.gradle head ==="
+          head -10 android/build.gradle
 
       # ── 8. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
