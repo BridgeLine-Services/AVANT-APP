@@ -47,13 +47,24 @@
       "expo-notifications",
       [
         "expo-speech",
-        { "useMicrophone": true }
+        {
+          "useMicrophone": true
+        }
       ]
     ],
     "extra": {
       "eas": {
         "projectId": "avant-bridgeline-001"
       }
-    }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./src/assets/icon.png"
+    },
+    "platforms": [
+      "android",
+      "web"
+    ]
   }
 }
