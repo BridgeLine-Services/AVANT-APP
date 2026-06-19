@@ -1,0 +1,73 @@
+name: Build AVANT APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # lets you trigger manually from the Actions tab
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Node + Java ───────────────────────────────────────
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ── 3. Android SDK ───────────────────────────────────────
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ── 4. Install dependencies ───────────────────────────────
+      - name: Install npm packages
+        run: npm install --legacy-peer-deps
+
+      # ── 5. Expo prebuild → generates /android folder ─────────
+      - name: Expo prebuild (generate Android project)
+        run: npx expo prebuild --platform android --clean --no-install
+        env:
+          EXPO_NO_GIT_STATUS: 1
+
+      # ── 6. Make gradlew executable ────────────────────────────
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      # ── 7. Build debug APK ────────────────────────────────────
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+        env:
+          GRADLE_OPTS: '-Xmx4g -XX:MaxMetaspaceSize=512m'
+
+      # ── 8. Upload APK as artifact ─────────────────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AVANT-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # ── 9. Print download instructions ───────────────────────
+      - name: APK build complete
+        run: |
+          echo "✅ AVANT APK built successfully"
+          echo ""
+          echo "To download:"
+          echo "  1. Go to https://github.com/BridgeLine-Services/AVANT-APP/actions"
+          echo "  2. Click the latest 'Build AVANT APK' run"
+          echo "  3. Scroll to 'Artifacts' → click 'AVANT-debug-apk' to download"
+          echo "  4. Unzip → install app-debug.apk on your Android phone"
