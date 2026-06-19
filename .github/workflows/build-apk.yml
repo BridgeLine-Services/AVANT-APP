@@ -49,6 +49,7 @@ jobs:
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_GIT_STATUS: 1
+          NODE_OPTIONS: --no-experimental-fetch
 
       # ── 7. Make gradlew executable ────────────────────────────
       - name: Make gradlew executable
