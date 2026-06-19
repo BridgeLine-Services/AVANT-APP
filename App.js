@@ -33,11 +33,13 @@ const Tab   = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 // ── Notification handler ───────────────────────────────────────
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false
+    }),
+  });
+}
 
 // ── Permission request list ────────────────────────────────────
 async function requestAllPermissions() {
@@ -144,7 +146,7 @@ export default function App() {
       await requestAllPermissions();
 
       // 2. Notification channel
-      await Notifications.requestPermissionsAsync();
+      if (Platform.OS !== 'web') await Notifications.requestPermissionsAsync();
 
       // 3. Start native foreground service
       startKernelService();
