@@ -1,4 +1,4 @@
-name: Build AVANT APK  # v3 - release APK with embedded JS bundle
+name: Build AVANT APK
 
 on:
   push:
@@ -11,11 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Node 18 ───────────────────────────────────────────
       - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
@@ -27,11 +25,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── 3. Android SDK ───────────────────────────────────────
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # ── 4. Cache node_modules ─────────────────────────────────
       - name: Cache node_modules
         uses: actions/cache@v4
         with:
@@ -40,33 +36,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node18-
 
-      # ── 5. Install dependencies ───────────────────────────────
       - name: Install npm packages
         run: npm install --legacy-peer-deps
 
-      # ── 6. ROOT CAUSE FIX: patch @react-native/gradle-plugin ─
-      # @react-native/gradle-plugin ships libs.versions.toml with kotlin="1.9.24"
-      # That file controls the ACTUAL Kotlin compiler loaded into the Gradle classpath.
-      # Compose Compiler 1.5.15 (expo-modules-core 2.2.3) requires Kotlin 1.9.25.
-      - name: Patch @react-native/gradle-plugin kotlin 1.9.24 → 1.9.25
+      - name: Patch kotlin version in gradle-plugin
         run: |
           TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
           sed -i 's/kotlin = "1\.9\.24"/kotlin = "1.9.25"/' "$TOML"
-          echo "✅ Kotlin version in gradle-plugin: $(grep 'kotlin = ' $TOML)"
+          grep 'kotlin = ' "$TOML"
 
-      # ── 7. Expo prebuild → generates /android folder ─────────
-      - name: Expo prebuild (generate Android project)
+      - name: Expo prebuild
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
 
-      # ── 8. Bundle JS into assets ─────────────────────────────
-      # THIS is the fix for the "Unable to load script" crash on device.
-      # A debug APK tries to connect to Metro bundler at runtime (dev server).
-      # For a standalone installable APK the JS bundle MUST be pre-built and
-      # embedded in the APK assets folder before Gradle runs.
-      - name: Bundle JavaScript (embed into APK assets)
+      - name: Bundle JavaScript into APK assets
         run: |
           mkdir -p android/app/src/main/assets
           npx react-native bundle \
@@ -74,97 +59,72 @@ jobs:
             --dev false \
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
+            --assets-dest android/app/src/main/res \
+            --reset-cache
         env:
           NODE_ENV: production
           NODE_OPTIONS: --no-experimental-fetch
 
-      # ── 9. Configure release signing with a debug keystore ───
-      # We use a generated debug keystore so the APK installs on any device
-      # without needing Play Store or a production signing certificate.
-      - name: Generate debug keystore for signing
+      - name: Generate debug keystore
         run: |
           keytool -genkeypair -v \
             -keystore android/app/debug.keystore \
             -alias androiddebugkey \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
-          echo "✅ Keystore generated"
+            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
+          ls -la android/app/debug.keystore
 
-      - name: Configure release signing in build.gradle
+      - name: Add signing config to app/build.gradle
         run: |
-          python3 - << 'PYEOF'
-          import re
-
+          python3 << 'PYEOF'
           with open('android/app/build.gradle', 'r') as f:
               content = f.read()
 
-          signing_config = '''
-      signingConfigs {
-          release {
-              storeFile file('debug.keystore')
-              storePassword 'android'
-              keyAlias 'androiddebugkey'
-              keyPassword 'android'
-          }
-      }
-'''
-          # Insert signingConfigs before buildTypes
-          content = content.replace(
-              '    buildTypes {',
-              signing_config + '    buildTypes {'
-          )
+          # Only add signingConfigs if not already present
+          if 'signingConfigs' not in content:
+              signing = (
+                  "\n    signingConfigs {\n"
+                  "        release {\n"
+                  "            storeFile file('debug.keystore')\n"
+                  "            storePassword 'android'\n"
+                  "            keyAlias 'androiddebugkey'\n"
+                  "            keyPassword 'android'\n"
+                  "        }\n"
+                  "    }\n"
+              )
+              content = content.replace('    buildTypes {', signing + '    buildTypes {')
 
-          # Make release build type use the signing config and disable shrinking
-          content = re.sub(
-              r'(release \{[^}]*)(})',
-              r'\1            signingConfig signingConfigs.release\n            shrinkResources false\n            minifyEnabled false\n        }',
-              content,
-              count=1,
-              flags=re.DOTALL
-          )
+          # Apply signing config to release buildType
+          if 'signingConfig signingConfigs.release' not in content:
+              content = content.replace(
+                  'buildTypes {\n        release {',
+                  'buildTypes {\n        release {\n            signingConfig signingConfigs.release\n            shrinkResources false\n            minifyEnabled false'
+              )
 
           with open('android/app/build.gradle', 'w') as f:
               f.write(content)
-
-          print("✅ Signing config injected into app/build.gradle")
+          print("Done")
           PYEOF
 
-      # ── 10. Make gradlew executable ───────────────────────────
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # ── 11. Build RELEASE APK (JS bundle embedded, no Metro) ─
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon --info 2>&1 | tail -100
         env:
           GRADLE_OPTS: '-Xmx4g -XX:MaxMetaspaceSize=512m'
 
-      # ── 12. Upload APK artifact ───────────────────────────────
-      - name: Upload APK artifact
+      - name: Verify APK exists
+        run: |
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          ls -lh "$APK"
+          echo "APK size: $(du -sh $APK | cut -f1)"
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: AVANT-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
-
-      # ── 13. Done ─────────────────────────────────────────────
-      - name: APK build complete
-        run: |
-          APK="android/app/build/outputs/apk/release/app-release.apk"
-          if [ -f "$APK" ]; then
-            SIZE=$(du -sh "$APK" | cut -f1)
-            echo "✅ AVANT release APK built — size: $SIZE"
-            echo ""
-            echo "To install on your phone:"
-            echo "  1. Go to https://github.com/BridgeLine-Services/AVANT-APP/actions"
-            echo "  2. Click the latest 'Build AVANT APK' run"
-            echo "  3. Scroll to 'Artifacts' → click 'AVANT-release-apk'"
-            echo "  4. Unzip → transfer app-release.apk to phone → install"
-            echo "  (Enable 'Install from unknown sources' in Android settings)"
-          else
-            echo "❌ APK not found"
-            exit 1
-          fi
