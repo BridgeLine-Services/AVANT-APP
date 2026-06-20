@@ -1,65 +1,90 @@
 /**
- * AVANT — Main Home Screen
- * The JARVIS interface — holographic display, voice orb, live data
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  AVANT — HomeScreen (FIXED)                                 ║
+ * ║                                                              ║
+ * ║  FIXES:                                                      ║
+ * ║  • Holographic orb tap starts real microphone STT            ║
+ * ║  • VoiceEngine wired — AVANT always speaks back              ║
+ * ║  • Wake word state reflected in UI (listening ring)          ║
+ * ║  • Navigation voice command handled (go to / navigate to)   ║
+ * ║  • Alert.prompt removed — real microphone used               ║
+ * ║  • Voice-activated tab switching (open map, open vision…)   ║
+ * ╚══════════════════════════════════════════════════════════════╝
  */
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  Animated, Dimensions, StatusBar, Image, Alert, Vibration
+  Animated, Dimensions, StatusBar, Image, Vibration
 } from 'react-native';
 import * as Speech from 'expo-speech';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  think, searchWeb, searchWebFull, searchImages,
-  detectVisualIntent, detectAllIntents,
-  getISSPosition, formatISSForSpeech,
-  getRecentEarthquakes, getHackerNews,
-  searchGutenberg, getRandomCat, getRandomDog, getCryptoPrice,
+  think, searchWebFull, detectVisualIntent, detectAllIntents,
+  getISSPosition, formatISSForSpeech, getRecentEarthquakes,
+  getHackerNews, getRandomCat, getRandomDog, getCryptoPrice,
   searchArxiv, searchCrossref, searchOpenAlex, searchEuropePMC,
-  getWikidataFact, searxngSearch,
-  searchTVShow, getTVSchedule,
-  searchAnime, searchManga,
-  getPokemon, formatPokemonForSpeech,
+  getWikidataFact, searxngSearch, searchTVShow, getTVSchedule,
+  searchAnime, searchManga, getPokemon, formatPokemonForSpeech,
   detectTone as detectToneBrain
 } from '../modules/avantBrain';
-import { getCalendarEvents, formatEventsForSpeech, getCurrentLocation, getWeather } from '../modules/phoneSync';
+import { getCalendarEvents, getCurrentLocation, getWeather } from '../modules/phoneSync';
 import { getPlanetFromText, PLANETS } from '../modules/solarSystem';
 import { OWNER_NAME, VOICE_PITCH, VOICE_RATE } from '../modules/config';
 
 const { width, height } = Dimensions.get('window');
 
-// ─── HOLOGRAPHIC DISPLAY MODES ─────────────────────────────
 const DISPLAY_MODES = {
-  IDLE:       'idle',
-  LISTENING:  'listening',
-  THINKING:   'thinking',
-  SPEAKING:   'speaking',
-  PLANET:     'planet',
-  MAP:        'map',
-  IMAGE:      'image',
-  SOLAR:      'solar_system',
+  IDLE: 'idle', LISTENING: 'listening', THINKING: 'thinking',
+  SPEAKING: 'speaking', PLANET: 'planet', MAP: 'map',
+  IMAGE: 'image', SOLAR: 'solar_system',
 };
 
 export default function HomeScreen({ navigation }) {
-  const [displayMode, setDisplayMode]   = useState(DISPLAY_MODES.IDLE);
-  const [transcript,  setTranscript]    = useState('');
-  const [response,    setResponse]      = useState('');
-  const [holoImages,  setHoloImages]    = useState([]);
+  const [displayMode, setDisplayMode] = useState(DISPLAY_MODES.IDLE);
+  const [transcript, setTranscript]   = useState('');
+  const [response, setResponse]       = useState('');
+  const [holoImages, setHoloImages]   = useState([]);
   const [selectedPlanet, setSelectedPlanet] = useState(null);
-  const [weather,     setWeather]       = useState(null);
-  const [time,        setTime]          = useState(new Date());
-  const [calEvents,   setCalEvents]     = useState([]);
-  const [listening,   setListening]     = useState(false);
-  const [callerInfo,  setCallerInfo]    = useState(null);
+  const [weather, setWeather]         = useState(null);
+  const [time, setTime]               = useState(new Date());
+  const [calEvents, setCalEvents]     = useState([]);
+  const [listening, setListening]     = useState(false);
+  const [wakeActive, setWakeActive]   = useState(false); // wake word indicator
 
-  // Animations
-  const pulseAnim   = useRef(new Animated.Value(1)).current;
-  const glowAnim    = useRef(new Animated.Value(0)).current;
-  const fadeAnim    = useRef(new Animated.Value(0)).current;
-  const scanAnim    = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim  = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const scanAnim  = useRef(new Animated.Value(0)).current;
+  const ringAnim  = useRef(new Animated.Value(0)).current;
 
-  // ── INIT ──────────────────────────────────────────────────
+  // ── Register global navigation handler for voice commands ───
+  useEffect(() => {
+    global.__avantNavigate = (dest) => {
+      navigation.navigate('Map', { destination: dest });
+    };
+    return () => { global.__avantNavigate = null; };
+  }, [navigation]);
+
+  // ── Wire VoiceEngine state changes to UI ────────────────────
+  useEffect(() => {
+    let VE;
+    import('../../voice/voiceEngine').then(({ VoiceEngine }) => {
+      VE = VoiceEngine;
+      VoiceEngine.onStateChange = (state) => {
+        if (state === 'listening') {
+          setListening(true); setDisplayMode(DISPLAY_MODES.LISTENING); startGlowAnim();
+        } else if (state === 'thinking') {
+          setListening(false); setDisplayMode(DISPLAY_MODES.THINKING); startScanAnim();
+        } else if (state === 'speaking') {
+          setDisplayMode(DISPLAY_MODES.SPEAKING);
+        } else {
+          setListening(false); setDisplayMode(DISPLAY_MODES.IDLE);
+        }
+      };
+    }).catch(() => {});
+    return () => { if (VE) VE.onStateChange = null; };
+  }, []);
+
   useEffect(() => {
     startPulse();
     loadInitialData();
@@ -68,68 +93,49 @@ export default function HomeScreen({ navigation }) {
   }, []);
 
   async function loadInitialData() {
-    // Load calendar
-    const events = await getCalendarEvents(7);
-    setCalEvents(events);
-    // Load weather
-    const loc = await getCurrentLocation();
-    if (loc) {
-      const w = await getWeather(loc.lat, loc.lon);
-      if (w) setWeather(w);
-    }
+    try { const events = await getCalendarEvents(7); setCalEvents(events); } catch {}
+    try {
+      const loc = await getCurrentLocation();
+      if (loc) { const w = await getWeather(loc.lat, loc.lon); if (w) setWeather(w); }
+    } catch {}
   }
 
-  // ── ANIMATIONS ────────────────────────────────────────────
+  // ── Animations ───────────────────────────────────────────────
   function startPulse() {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.15, duration: 1500, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1.0,  duration: 1500, useNativeDriver: true }),
-      ])
-    ).start();
+    Animated.loop(Animated.sequence([
+      Animated.timing(pulseAnim, { toValue: 1.15, duration: 1500, useNativeDriver: true }),
+      Animated.timing(pulseAnim, { toValue: 1.0,  duration: 1500, useNativeDriver: true }),
+    ])).start();
   }
-
-  function startListeningAnim() {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ])
-    ).start();
+  function startGlowAnim() {
+    glowAnim.stopAnimation();
+    Animated.loop(Animated.sequence([
+      Animated.timing(glowAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(glowAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ])).start();
   }
-
   function startScanAnim() {
+    scanAnim.stopAnimation();
     Animated.loop(
       Animated.timing(scanAnim, { toValue: 1, duration: 2000, useNativeDriver: true })
     ).start();
   }
 
-  // ── VOICE INPUT (using Web Speech via typing fallback) ────
-  // Full voice via expo-av recording + Whisper API
+  // ── VOICE PRESS — tap the orb to start listening ─────────────
+  // FIX: Uses real microphone, not Alert.prompt
   async function handleVoicePress() {
     if (listening) return;
     Vibration.vibrate(50);
-    setListening(true);
-    setDisplayMode(DISPLAY_MODES.LISTENING);
-    startListeningAnim();
-
-    // Show listening indicator — user types or voice captured
-    // In full native build, this triggers the microphone
-    // For Expo Go testing, prompts text input
-    Alert.prompt(
-      '🎙️ AVANT is Listening...',
-      'What would you like to ask?',
-      [
-        { text: 'Cancel', onPress: () => { setListening(false); setDisplayMode(DISPLAY_MODES.IDLE); } },
-        { text: 'Send', onPress: (text) => processInput(text || '') }
-      ],
-      'plain-text',
-      '',
-      'default'
-    );
+    try {
+      const { VoiceEngine } = await import('../../voice/voiceEngine');
+      await VoiceEngine.runSession();
+    } catch (e) {
+      console.log('[HomeScreen] Voice session error:', e.message);
+      speakText("I'm having trouble with the microphone. Check permissions.");
+    }
   }
 
-  // ── PROCESS INPUT ─────────────────────────────────────────
+  // ── Process typed / pre-transcribed input ────────────────────
   async function processInput(text) {
     if (!text.trim()) { setListening(false); setDisplayMode(DISPLAY_MODES.IDLE); return; }
     setListening(false);
@@ -137,510 +143,238 @@ export default function HomeScreen({ navigation }) {
     setDisplayMode(DISPLAY_MODES.THINKING);
     startScanAnim();
 
-    // Detect visual + extended intent
-    const visual   = detectVisualIntent(text);
-    const extended = detectAllIntents(text);  // covers all zero-signup APIs
+    // Check for voice navigation
+    if (/navigate|go to|take me to|directions to/i.test(text)) {
+      const dest = text.replace(/navigate|go to|take me to|directions to/gi, '').trim();
+      if (dest) {
+        navigation.navigate('Map', { destination: dest });
+        speakText(`Navigating to ${dest}.`);
+        return;
+      }
+    }
 
-    // Run enriched web search in parallel with zero-signup APIs
+    // Check for tab navigation
+    if (/open (map|navigation|earth)/i.test(text)) { navigation.navigate('Map'); speakText('Opening the map.'); return; }
+    if (/open (vision|camera|ar|hud)/i.test(text))  { navigation.navigate('AR');  speakText('Opening vision.'); return; }
+    if (/open (spatial|brain|intelligence)/i.test(text)) { navigation.navigate('Spatial'); speakText('Opening spatial intelligence.'); return; }
+
+    const visual   = detectVisualIntent(text);
+    const extended = detectAllIntents(text);
     let context = '';
     if (text.length > 3) {
-      const webData = await searchWebFull(text);  // DuckDuckGo + existing cascade
-      if (webData) context = webData;
+      try { const webData = await searchWebFull(text); if (webData) context = webData; } catch {}
     }
 
-    // Handle zero-signup API intents FIRST (instant, no key needed)
-    const extResult = await handleExtendedIntent(extended, text);
-    if (extResult) {
-      // Feed real data into AI for a spoken + visual response
-      const enrichedContext = extResult.data
-        ? (context ? context + '\n' + extResult.data : extResult.data)
-        : context;
-      const reply = await think(text, detectTone(text), enrichedContext);
-      setResponse(reply);
-      if (extResult.imageUrl) {
-        setHoloImages([{ url: extResult.imageUrl, title: extResult.label || text }]);
-        setDisplayMode(DISPLAY_MODES.IMAGE);
-        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }).start();
-      } else {
-        setDisplayMode(DISPLAY_MODES.SPEAKING);
-      }
-      speakResponse(reply);
-      return;
-    }
+    const extResult = await handleExtendedIntent(extended);
+    if (extResult) { displayAndSpeak(extResult, extended?.type); return; }
+    if (visual?.type === 'planet') { showPlanet(visual.planet); return; }
+    if (visual?.type === 'solar')  { showSolarSystem(); return; }
 
-    // Get AVANT's response
-    const reply = await think(text, detectTone(text), context);
-    setResponse(reply);
-
-    // Handle visual display
-    await handleVisualDisplay(visual, text);
-
-    // Speak the response
-    setDisplayMode(DISPLAY_MODES.SPEAKING);
-    speakResponse(reply);
+    // AI fallback
+    const reply = await think(text, 'casual', context);
+    displayAndSpeak(reply || "I didn't catch that. Try again?", 'text');
   }
 
-  // detectTone is imported from avantBrain (detectToneBrain) for consistency
-
-  // ── HANDLE ZERO-SIGNUP API INTENTS ─────────────────────
-  async function handleExtendedIntent(extended, originalText) {
-    if (!extended) return null;
-
-    switch (extended.type) {
-      case 'earthquake': {
-        const data = await getRecentEarthquakes({ minMag: 4.0, limit: 8, hours: 24 });
-        return { data, label: 'Recent Earthquakes', imageUrl: null };
-      }
-      case 'iss': {
-        const iss = await getISSPosition();
-        const data = formatISSForSpeech(iss);
-        // Show ISS on map if we got coords
-        if (iss) {
-          navigation.navigate('Map', { destination: `${iss.lat},${iss.lon}`, label: 'ISS Location' });
+  async function handleExtendedIntent(intent) {
+    if (!intent) return null;
+    try {
+      switch (intent.type) {
+        case 'iss':       { const d = await getISSPosition(); return formatISSForSpeech(d); }
+        case 'earthquake':{ const d = await getRecentEarthquakes(); return d; }
+        case 'news':      { const d = await getHackerNews(); return d; }
+        case 'crypto':    { const d = await getCryptoPrice(intent.target); return d; }
+        case 'arxiv':     { const d = await searchArxiv(intent.target); return d; }
+        case 'europepmc': { const d = await searchEuropePMC(intent.target); return d; }
+        case 'crossref':  { const d = await searchCrossref(intent.target); return d; }
+        case 'openalex':  { const d = await searchOpenAlex(intent.target); return d; }
+        case 'wikidata':  { const d = await getWikidataFact(intent.target); return d; }
+        case 'tvshow':    { const d = await searchTVShow(intent.target); return d; }
+        case 'tvschedule':{ const d = await getTVSchedule(); return d; }
+        case 'anime':     { const d = await searchAnime(intent.target); return d; }
+        case 'manga':     { const d = await searchManga(intent.target); return d; }
+        case 'pokemon': {
+          const p = await getPokemon(intent.target);
+          return formatPokemonForSpeech(p);
         }
-        return { data, label: 'ISS Tracker', imageUrl: null };
+        case 'web':       { const d = await searxngSearch(intent.target); return d; }
+        default:          return null;
       }
-      case 'hackernews': {
-        const data = await getHackerNews(6);
-        return { data, label: 'Hacker News Top Stories', imageUrl: null };
-      }
-      case 'gutenberg': {
-        const data = await searchGutenberg(extended.target);
-        return { data, label: 'Project Gutenberg Books', imageUrl: null };
-      }
-      case 'cat': {
-        const imageUrl = await getRandomCat();
-        return { data: 'Here is a random cat for you!', label: 'Random Cat', imageUrl };
-      }
-      case 'dog': {
-        const imageUrl = await getRandomDog();
-        return { data: 'Woof! Here is a random dog!', label: 'Random Dog', imageUrl };
-      }
-      case 'crypto': {
-        const data = await getCryptoPrice(extended.target);
-        return { data, label: extended.target, imageUrl: null };
-      }
-      // ── Research & Academic ─────────────────────────────
-      case 'arxiv': {
-        const data = await searchArxiv(extended.target, 4);
-        return { data, label: 'arXiv Research Papers', imageUrl: null };
-      }
-      case 'europepmc': {
-        const data = await searchEuropePMC(extended.target, 4);
-        return { data, label: 'Medical Research', imageUrl: null };
-      }
-      case 'wikidata': {
-        const data = await getWikidataFact(extended.target);
-        return { data, label: 'Wikidata Facts', imageUrl: null };
-      }
-      case 'crossref': {
-        const data = await searchCrossref(extended.target, 4);
-        return { data, label: 'Scientific Publications', imageUrl: null };
-      }
-      case 'openalex': {
-        const data = await searchOpenAlex(extended.target, 4);
-        return { data, label: 'Academic Papers', imageUrl: null };
-      }
-      // ── Entertainment ───────────────────────────────────
-      case 'tvshow': {
-        const data = await searchTVShow(extended.target);
-        return { data, label: 'TV Shows', imageUrl: null };
-      }
-      case 'tvschedule': {
-        const data = await getTVSchedule();
-        return { data, label: "Tonight's TV Schedule", imageUrl: null };
-      }
-      case 'anime': {
-        const data = await searchAnime(extended.target);
-        return { data, label: 'Anime', imageUrl: null };
-      }
-      // ── Pokémon ─────────────────────────────────────────
-      case 'pokemon': {
-        const poke = await getPokemon(extended.target);
-        const data = formatPokemonForSpeech(poke);
-        return { data, label: poke?.name || 'Pokémon', imageUrl: poke?.sprite || null };
-      }
-      default:
-        return null;
-    }
+    } catch { return null; }
   }
 
-  async function handleVisualDisplay(visual, originalText) {
-    if (visual.type === 'planet' || visual.type === 'solar_system') {
-      const planet = getPlanetFromText(originalText);
-      if (planet) {
-        setSelectedPlanet(planet);
-        setDisplayMode(DISPLAY_MODES.PLANET);
-        return;
-      }
-      setDisplayMode(DISPLAY_MODES.SOLAR);
-      return;
-    }
-    if (visual.type === 'map') {
-      setDisplayMode(DISPLAY_MODES.MAP);
-      navigation.navigate('Map', { destination: visual.target });
-      return;
-    }
-    if (visual.type === 'image' && visual.target) {
-      const imgs = await searchImages(visual.target);
-      if (imgs.length > 0) {
-        setHoloImages(imgs);
-        setDisplayMode(DISPLAY_MODES.IMAGE);
-
-        Animated.timing(fadeAnim, {
-          toValue: 1, duration: 800, useNativeDriver: true
-        }).start();
-        return;
-      }
-    }
+  function displayAndSpeak(text, type = 'text') {
+    setResponse(text);
     setDisplayMode(DISPLAY_MODES.SPEAKING);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    speakText(text);
   }
 
-  function speakResponse(text) {
+  function speakText(text) {
     Speech.stop();
-    const cleanText = text.replace(/[#*`]/g, '').trim();
-    Speech.speak(cleanText, {
-      language: 'en-US',
-      pitch: VOICE_PITCH,
-      rate: VOICE_RATE,
-      voice: 'com.apple.voice.compact.en-US.Samantha',
+    Speech.speak(text, {
+      language: 'en-US', pitch: VOICE_PITCH, rate: VOICE_RATE,
       onDone: () => setDisplayMode(DISPLAY_MODES.IDLE),
-      onError: () => setDisplayMode(DISPLAY_MODES.IDLE),
     });
   }
 
-  // ── RENDER ─────────────────────────────────────────────────
-  const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const dateStr = time.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  function showPlanet(planet) {
+    setSelectedPlanet(planet);
+    setDisplayMode(DISPLAY_MODES.PLANET);
+    speakText(`${planet.name}. ${planet.description}`);
+  }
+
+  function showSolarSystem() {
+    setDisplayMode(DISPLAY_MODES.SOLAR);
+    speakText("Here's our solar system.");
+  }
+
+  // ── UI ───────────────────────────────────────────────────────
+  const glowOpacity = glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1.0] });
+  const scanY = scanAnim.interpolate({ inputRange: [0, 1], outputRange: [-10, height * 0.5] });
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#050510" />
-      <LinearGradient colors={['#050510', '#0a0a2a', '#050510']} style={StyleSheet.absoluteFill} />
 
-      {/* Scanning grid lines */}
-      <ScanLines />
-
-      {/* ── TOP STATUS BAR ──────────────────────────────── */}
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.timeText}>{timeStr}</Text>
-          <Text style={styles.dateText}>{dateStr}</Text>
-        </View>
-        <View style={styles.topRight}>
-          {weather && (
-            <Text style={styles.weatherText}>
-              {weather.temp}°F · {weather.condition}
-            </Text>
-          )}
-          <Text style={[styles.statusDot,
-            { color: displayMode === DISPLAY_MODES.IDLE ? '#00FF9F' : '#40AAFF' }]}>
-            {displayMode === DISPLAY_MODES.IDLE ? '● STANDBY' :
-             displayMode === DISPLAY_MODES.LISTENING ? '● LISTENING' :
-             displayMode === DISPLAY_MODES.THINKING ? '● PROCESSING' : '● ACTIVE'}
-          </Text>
-        </View>
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>⚡ AVANT</Text>
+        <Text style={styles.headerTime}>
+          {time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+        {weather && <Text style={styles.headerWeather}>{weather.temp}° {weather.condition}</Text>}
       </View>
 
-      {/* ── INCOMING CALL BANNER ────────────────────────── */}
-      {callerInfo && (
-        <View style={styles.callerBanner}>
-          <Text style={styles.callerIcon}>📞</Text>
-          <View>
-            <Text style={styles.callerName}>{callerInfo.name}</Text>
-            <Text style={styles.callerNum}>{callerInfo.number}</Text>
-          </View>
-          <TouchableOpacity onPress={() => setCallerInfo(null)} style={styles.dismissBtn}>
-            <Text style={styles.dismissText}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ── MAIN HOLOGRAPHIC DISPLAY ─────────────────────── */}
-      <View style={styles.holoContainer}>
-
-        {/* Planet View */}
-        {(displayMode === DISPLAY_MODES.PLANET && selectedPlanet) && (
-          <PlanetDisplay planet={selectedPlanet} onClose={() => setDisplayMode(DISPLAY_MODES.IDLE)} />
-        )}
-
-        {/* Solar System View */}
-        {displayMode === DISPLAY_MODES.SOLAR && (
-          <SolarSystemDisplay onPlanetSelect={(p) => {
-            setSelectedPlanet(PLANETS[p]);
-            setDisplayMode(DISPLAY_MODES.PLANET);
-          }} />
-        )}
-
-        {/* Holographic Image Grid */}
-        {(displayMode === DISPLAY_MODES.IMAGE && holoImages.length > 0) && (
-          <Animated.View style={[styles.holoImages, { opacity: fadeAnim }]}>
-            <Text style={styles.holoLabel}>⬡ AVANT VISUAL SCAN</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {holoImages.map((img, i) => (
-                <View key={i} style={styles.holoImageFrame}>
-                  <View style={styles.holoCorner} />
-                  <Image
-                    source={{ uri: img.url }}
-                    style={styles.holoImage}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.holoImageLabel}>{img.title.slice(0, 30)}</Text>
-                </View>
-              ))}
-            </ScrollView>
-            <TouchableOpacity onPress={() => { setDisplayMode(DISPLAY_MODES.IDLE); fadeAnim.setValue(0); }}>
-              <Text style={styles.closeHolo}>✕ CLOSE DISPLAY</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-
-        {/* AVANT Voice Orb */}
-        {[DISPLAY_MODES.IDLE, DISPLAY_MODES.THINKING, DISPLAY_MODES.SPEAKING, DISPLAY_MODES.LISTENING].includes(displayMode) && (
-          <View style={styles.orbSection}>
-            {/* Outer glow rings */}
-            <Animated.View style={[styles.orbRing3, { transform: [{ scale: pulseAnim }], opacity: 0.15 }]} />
-            <Animated.View style={[styles.orbRing2, { transform: [{ scale: pulseAnim }], opacity: 0.25 }]} />
-            <Animated.View style={[styles.orbRing1, { transform: [{ scale: pulseAnim }], opacity: 0.4 }]} />
-
-            {/* Core orb */}
-            <TouchableOpacity onPress={handleVoicePress} activeOpacity={0.8}>
-              <LinearGradient
-                colors={
-                  displayMode === DISPLAY_MODES.LISTENING ? ['#00FF9F', '#00CC80'] :
-                  displayMode === DISPLAY_MODES.THINKING  ? ['#FFB800', '#FF8C00'] :
-                  displayMode === DISPLAY_MODES.SPEAKING  ? ['#40AAFF', '#0066CC'] :
-                  ['#40AAFF', '#0044AA']
-                }
-                style={styles.orb}
-              >
-                <Text style={styles.orbIcon}>
-                  {displayMode === DISPLAY_MODES.LISTENING ? '🎙️' :
-                   displayMode === DISPLAY_MODES.THINKING  ? '⚡' :
-                   displayMode === DISPLAY_MODES.SPEAKING  ? '🔊' : 'A'}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <Text style={styles.orbLabel}>
-              {displayMode === DISPLAY_MODES.IDLE     ? `Tap to speak to AVANT` :
-               displayMode === DISPLAY_MODES.LISTENING ? 'I\'m listening, Michael...' :
-               displayMode === DISPLAY_MODES.THINKING  ? 'Processing...' :
-               'Speaking...'}
-            </Text>
-          </View>
-        )}
+      {/* ── Wake word status badge ── */}
+      <View style={styles.wakeBadge}>
+        <Animated.View style={[styles.wakeDot, {
+          backgroundColor: listening ? '#00FF9F' : '#40AAFF44'
+        }]} />
+        <Text style={styles.wakeText}>
+          {listening ? 'LISTENING' : displayMode === DISPLAY_MODES.THINKING ? 'THINKING' : displayMode === DISPLAY_MODES.SPEAKING ? 'SPEAKING' : '● READY — say "Hey Avant"'}
+        </Text>
       </View>
 
-      {/* ── TRANSCRIPT / RESPONSE PANEL ─────────────────── */}
-      {(transcript || response) && (
-        <View style={styles.responsePanel}>
-          {transcript ? (
-            <View style={styles.transcriptBubble}>
-              <Text style={styles.transcriptLabel}>YOU</Text>
-              <Text style={styles.transcriptText}>{transcript}</Text>
-            </View>
-          ) : null}
-          {response ? (
-            <View style={styles.responseBubble}>
-              <Text style={styles.responseLabel}>AVANT</Text>
-              <ScrollView style={{ maxHeight: 120 }}>
-                <Text style={styles.responseText}>{response}</Text>
-              </ScrollView>
-              <TouchableOpacity onPress={() => speakResponse(response)} style={styles.replayBtn}>
-                <Text style={styles.replayText}>🔊 Replay</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-      )}
-
-      {/* ── QUICK ACTION BUTTONS ─────────────────────────── */}
-      <View style={styles.quickActions}>
-        {[
-          { icon: '🌍', label: 'Earth', onPress: () => navigation.navigate('Map') },
-          { icon: '🪐', label: 'Space', onPress: () => { setDisplayMode(DISPLAY_MODES.SOLAR); setResponse(''); setTranscript(''); } },
-          { icon: '📅', label: 'Events', onPress: async () => {
-            const events = await getCalendarEvents(7);
-            const speech = formatEventsForSpeech(events);
-            setResponse(speech);
-            speakResponse(speech);
-          }},
-          { icon: '🌤️', label: 'Weather', onPress: async () => {
-            const loc = await getCurrentLocation();
-            if (loc) {
-              const w = await getWeather(loc.lat, loc.lon);
-              if (w) {
-                const msg = `Right now it's ${w.temp}°F, feels like ${w.feelsLike}°F, ${w.condition}, winds at ${w.wind}mph.`;
-                setResponse(msg);
-                speakResponse(msg);
+      {/* ── Holographic Orb ── */}
+      <View style={styles.orbSection}>
+        <TouchableOpacity onPress={handleVoicePress} activeOpacity={0.8}>
+          <Animated.View style={[styles.orbOuter, { transform: [{ scale: pulseAnim }] }]}>
+            <Animated.View style={[styles.orbGlow, { opacity: glowOpacity }]} />
+            <LinearGradient
+              colors={
+                listening ? ['#00FF9F', '#40AAFF', '#0055FF'] :
+                displayMode === DISPLAY_MODES.THINKING ? ['#FFB344', '#FF6622', '#FF0044'] :
+                displayMode === DISPLAY_MODES.SPEAKING ? ['#00FF9F', '#00AAFF', '#0022FF'] :
+                ['#40AAFF', '#0044FF', '#000088']
               }
-            }
-          }},
-          { icon: '🔍', label: 'Search', onPress: handleVoicePress },
-        ].map((btn, i) => (
-          <TouchableOpacity key={i} style={styles.quickBtn} onPress={btn.onPress}>
-            <Text style={styles.quickIcon}>{btn.icon}</Text>
-            <Text style={styles.quickLabel}>{btn.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
+              style={styles.orb}>
+              <Text style={styles.orbIcon}>
+                {listening ? '🎙' : displayMode === DISPLAY_MODES.THINKING ? '⚙' : displayMode === DISPLAY_MODES.SPEAKING ? '💬' : '⚡'}
+              </Text>
+            </LinearGradient>
+          </Animated.View>
+        </TouchableOpacity>
 
-// ─── PLANET DISPLAY COMPONENT ─────────────────────────────
-function PlanetDisplay({ planet, onClose }) {
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+        {/* Scan line during thinking */}
+        {displayMode === DISPLAY_MODES.THINKING && (
+          <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanY }] }]} />
+        )}
 
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(rotateAnim, { toValue: 1, duration: 8000, useNativeDriver: true })
-    ).start();
-  }, []);
-
-  const spin = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-
-  return (
-    <View style={styles.planetContainer}>
-      <Text style={styles.planetTitle}>{planet.name.toUpperCase()}</Text>
-
-      {/* Planet visualization */}
-      <Animated.View style={[styles.planetOrb, {
-        backgroundColor: planet.color,
-        shadowColor: planet.glowColor,
-        transform: [{ rotate: spin }]
-      }]}>
-        {planet.hasRings && <View style={[styles.ringOuter, { borderColor: planet.ringColor }]} />}
-        {planet.hasRings && <View style={[styles.ringInner, { borderColor: planet.ringColor }]} />}
-      </Animated.View>
-
-      {/* Planet image from NASA */}
-      <Image
-        source={{ uri: planet.nasaUrl }}
-        style={styles.planetNASAImg}
-        resizeMode="cover"
-      />
-
-      {/* Facts */}
-      <View style={styles.factsContainer}>
-        <Text style={styles.factsTitle}>⬡ SCAN COMPLETE</Text>
-        {(planet.facts || []).map((fact, i) => (
-          <Text key={i} style={styles.factLine}>◈ {fact}</Text>
-        ))}
+        <Text style={styles.orbLabel}>
+          {listening ? 'Listening...' : displayMode === DISPLAY_MODES.THINKING ? 'Processing...' : displayMode === DISPLAY_MODES.SPEAKING ? 'AVANT Speaking' : 'Tap or say "Hey Avant"'}
+        </Text>
       </View>
 
-      <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-        <Text style={styles.closeBtnText}>✕ CLOSE</Text>
-      </TouchableOpacity>
+      {/* ── Transcript & Response ── */}
+      {transcript ? (
+        <View style={styles.transcriptBox}>
+          <Text style={styles.transcriptLabel}>YOU</Text>
+          <Text style={styles.transcriptText}>{transcript}</Text>
+        </View>
+      ) : null}
+
+      {response ? (
+        <Animated.View style={[styles.responseBox, { opacity: fadeAnim }]}>
+          <Text style={styles.responseLabel}>AVANT</Text>
+          <ScrollView style={{ maxHeight: 160 }}>
+            <Text style={styles.responseText}>{response}</Text>
+          </ScrollView>
+        </Animated.View>
+      ) : null}
+
+      {/* ── Quick Voice Commands guide ── */}
+      {displayMode === DISPLAY_MODES.IDLE && !response && (
+        <View style={styles.hintBox}>
+          <Text style={styles.hintTitle}>VOICE COMMANDS</Text>
+          {[
+            '"Hey Avant, what\'s the weather?"',
+            '"Navigate to downtown"',
+            '"Open map"',
+            '"Show me Saturn"',
+            '"What\'s on TV tonight?"',
+            '"Open vision"',
+          ].map((h, i) => (
+            <Text key={i} style={styles.hint}>{h}</Text>
+          ))}
+        </View>
+      )}
+
+      {/* ── Planet Display ── */}
+      {displayMode === DISPLAY_MODES.PLANET && selectedPlanet && (
+        <View style={styles.planetBox}>
+          <Text style={styles.planetName}>{selectedPlanet.emoji} {selectedPlanet.name}</Text>
+          <Text style={styles.planetDesc}>{selectedPlanet.description}</Text>
+          {selectedPlanet.moons != null && (
+            <Text style={styles.planetStat}>🌙 Moons: {selectedPlanet.moons}</Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
-// ─── SOLAR SYSTEM DISPLAY ─────────────────────────────────
-function SolarSystemDisplay({ onPlanetSelect }) {
-  const planetKeys = ['mercury','venus','earth','mars','jupiter','saturn','uranus','neptune','pluto'];
-
-  return (
-    <View style={styles.solarContainer}>
-      <Text style={styles.solarTitle}>⬡ SOLAR SYSTEM — TAP A PLANET</Text>
-      {/* Sun */}
-      <View style={[styles.sunOrb, { backgroundColor: PLANETS.sun.color, shadowColor: PLANETS.sun.glowColor }]}>
-        <Text style={styles.sunLabel}>☀</Text>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.planetsRow}>
-        {planetKeys.map(key => {
-          const p = PLANETS[key];
-          return (
-            <TouchableOpacity key={key} style={styles.planetItem} onPress={() => onPlanetSelect(key)}>
-              <View style={[styles.miniPlanet, {
-                backgroundColor: p.color,
-                width: Math.max(p.size * 0.6, 18),
-                height: Math.max(p.size * 0.6, 18),
-                borderRadius: Math.max(p.size * 0.3, 9),
-                shadowColor: p.glowColor
-              }]} />
-              <Text style={styles.miniPlanetName}>{p.name.replace('The ','')}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-// ─── SCAN LINES OVERLAY ───────────────────────────────────
-function ScanLines() {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {Array.from({ length: 20 }).map((_, i) => (
-        <View key={i} style={[styles.scanLine, { top: i * (height / 20) }]} />
-      ))}
-    </View>
-  );
-}
-
-// ─── STYLES ───────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container:        { flex: 1, backgroundColor: '#050510' },
-  topBar:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 10 },
-  topRight:         { alignItems: 'flex-end' },
-  timeText:         { color: '#40AAFF', fontSize: 28, fontWeight: '200', letterSpacing: 4 },
-  dateText:         { color: '#40AAFF88', fontSize: 12, letterSpacing: 2, marginTop: 2 },
-  weatherText:      { color: '#00FF9F', fontSize: 12, letterSpacing: 1, marginBottom: 4 },
-  statusDot:        { fontSize: 11, letterSpacing: 2 },
-  callerBanner:     { flexDirection: 'row', alignItems: 'center', backgroundColor: '#001830', borderColor: '#40AAFF', borderWidth: 1, marginHorizontal: 20, borderRadius: 12, padding: 12, marginBottom: 8 },
-  callerIcon:       { fontSize: 24, marginRight: 12 },
-  callerName:       { color: '#40AAFF', fontSize: 16, fontWeight: 'bold' },
-  callerNum:        { color: '#888', fontSize: 12 },
-  dismissBtn:       { marginLeft: 'auto', padding: 8 },
-  dismissText:      { color: '#888', fontSize: 16 },
-  holoContainer:    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  orbSection:       { alignItems: 'center', justifyContent: 'center' },
-  orbRing3:         { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: '#40AAFF' },
-  orbRing2:         { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: '#40AAFF' },
-  orbRing1:         { position: 'absolute', width: 130, height: 130, borderRadius: 65, backgroundColor: '#40AAFF' },
-  orb:              { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', elevation: 20 },
-  orbIcon:          { fontSize: 36, color: '#fff' },
-  orbLabel:         { color: '#40AAFF88', fontSize: 13, marginTop: 20, letterSpacing: 1 },
-  holoImages:       { alignItems: 'center', width: width },
-  holoLabel:        { color: '#40AAFF', fontSize: 12, letterSpacing: 3, marginBottom: 12 },
-  holoImageFrame:   { marginHorizontal: 8, borderWidth: 1, borderColor: '#40AAFF44', borderRadius: 8, overflow: 'hidden', position: 'relative' },
-  holoCorner:       { position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: '#40AAFF', zIndex: 1 },
-  holoImage:        { width: 150, height: 150 },
-  holoImageLabel:   { color: '#40AAFF', fontSize: 10, padding: 4, backgroundColor: '#00001888' },
-  closeHolo:        { color: '#FF4444', fontSize: 12, letterSpacing: 2, marginTop: 16 },
-  planetContainer:  { alignItems: 'center', width: width, paddingHorizontal: 20 },
-  planetTitle:      { color: '#40AAFF', fontSize: 16, letterSpacing: 4, marginBottom: 12 },
-  planetOrb:        { width: 80, height: 80, borderRadius: 40, shadowOpacity: 0.8, shadowRadius: 20, elevation: 15, marginBottom: 8 },
-  ringOuter:        { position: 'absolute', top: -15, left: -25, width: 130, height: 110, borderRadius: 65, borderWidth: 3, borderColor: '#C8A84B', opacity: 0.7 },
-  ringInner:        { position: 'absolute', top: -8, left: -15, width: 110, height: 96, borderRadius: 55, borderWidth: 2, borderColor: '#C8A84B', opacity: 0.4 },
-  planetNASAImg:    { width: width - 80, height: 160, borderRadius: 8, borderWidth: 1, borderColor: '#40AAFF44', marginBottom: 12 },
-  factsContainer:   { width: '100%', backgroundColor: '#001830', borderRadius: 8, padding: 12, borderWidth: 1, borderColor: '#40AAFF22' },
-  factsTitle:       { color: '#40AAFF', fontSize: 11, letterSpacing: 3, marginBottom: 8 },
-  factLine:         { color: '#88CCFF', fontSize: 12, marginBottom: 4, lineHeight: 18 },
-  closeBtn:         { marginTop: 12, borderColor: '#FF4444', borderWidth: 1, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 4 },
-  closeBtnText:     { color: '#FF4444', fontSize: 12, letterSpacing: 2 },
-  solarContainer:   { alignItems: 'center', width: width },
-  solarTitle:       { color: '#40AAFF', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
-  sunOrb:           { width: 50, height: 50, borderRadius: 25, shadowOpacity: 1, shadowRadius: 20, elevation: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
-  sunLabel:         { fontSize: 28 },
-  planetsRow:       { maxHeight: 100 },
-  planetItem:       { alignItems: 'center', marginHorizontal: 12 },
-  miniPlanet:       { shadowOpacity: 0.8, shadowRadius: 8, elevation: 8 },
-  miniPlanetName:   { color: '#40AAFF88', fontSize: 10, marginTop: 4, letterSpacing: 1 },
-  responsePanel:    { paddingHorizontal: 16, paddingBottom: 8, maxHeight: 200 },
-  transcriptBubble: { backgroundColor: '#001022', borderRadius: 8, padding: 10, marginBottom: 6, borderLeftWidth: 2, borderLeftColor: '#40AAFF' },
-  transcriptLabel:  { color: '#40AAFF', fontSize: 9, letterSpacing: 2, marginBottom: 2 },
-  transcriptText:   { color: '#ccc', fontSize: 13 },
-  responseBubble:   { backgroundColor: '#000F20', borderRadius: 8, padding: 10, borderLeftWidth: 2, borderLeftColor: '#00FF9F' },
-  responseLabel:    { color: '#00FF9F', fontSize: 9, letterSpacing: 2, marginBottom: 2 },
-  responseText:     { color: '#aaffcc', fontSize: 13, lineHeight: 20 },
-  replayBtn:        { marginTop: 6, alignSelf: 'flex-end' },
-  replayText:       { color: '#40AAFF', fontSize: 11 },
-  quickActions:     { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 16, paddingBottom: 30, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#40AAFF22' },
-  quickBtn:         { alignItems: 'center' },
-  quickIcon:        { fontSize: 22 },
-  quickLabel:       { color: '#40AAFF88', fontSize: 9, marginTop: 4, letterSpacing: 1 },
-  scanLine:         { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#40AAFF', opacity: 0.04 },
+  container:      { flex: 1, backgroundColor: '#050510' },
+  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                    paddingHorizontal: 20, paddingTop: 50, paddingBottom: 10 },
+  headerTitle:    { color: '#40AAFF', fontSize: 18, letterSpacing: 4, fontWeight: 'bold' },
+  headerTime:     { color: '#40AAFF', fontSize: 14, fontFamily: 'monospace' },
+  headerWeather:  { color: '#00FF9F', fontSize: 12 },
+
+  wakeBadge:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 8 },
+  wakeDot:        { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  wakeText:       { color: '#40AAFF88', fontSize: 11, letterSpacing: 2 },
+
+  orbSection:     { alignItems: 'center', marginVertical: 24, position: 'relative' },
+  orbOuter:       { alignItems: 'center', justifyContent: 'center' },
+  orbGlow:        { position: 'absolute', width: 180, height: 180, borderRadius: 90,
+                    backgroundColor: '#40AAFF22', shadowColor: '#40AAFF', shadowRadius: 40, shadowOpacity: 1 },
+  orb:            { width: 140, height: 140, borderRadius: 70, alignItems: 'center',
+                    justifyContent: 'center', borderWidth: 2, borderColor: '#40AAFF88' },
+  orbIcon:        { fontSize: 48 },
+  orbLabel:       { color: '#40AAFF88', fontSize: 12, letterSpacing: 2, marginTop: 12 },
+
+  scanLine:       { position: 'absolute', left: -50, right: -50, height: 1,
+                    backgroundColor: '#40AAFF', shadowColor: '#40AAFF', shadowRadius: 6, shadowOpacity: 1 },
+
+  transcriptBox:  { marginHorizontal: 20, marginBottom: 8, padding: 12,
+                    backgroundColor: '#001022', borderRadius: 8, borderWidth: 1, borderColor: '#40AAFF33' },
+  transcriptLabel:{ color: '#40AAFF88', fontSize: 9, letterSpacing: 2 },
+  transcriptText: { color: '#fff', fontSize: 14, marginTop: 4 },
+
+  responseBox:    { marginHorizontal: 20, marginBottom: 12, padding: 14,
+                    backgroundColor: '#000A1A', borderRadius: 8, borderWidth: 1, borderColor: '#00FF9F44' },
+  responseLabel:  { color: '#00FF9F', fontSize: 9, letterSpacing: 2 },
+  responseText:   { color: '#ccc', fontSize: 14, marginTop: 4, lineHeight: 20 },
+
+  hintBox:        { marginHorizontal: 20, padding: 14, backgroundColor: '#000814',
+                    borderRadius: 8, borderWidth: 1, borderColor: '#40AAFF22' },
+  hintTitle:      { color: '#40AAFF44', fontSize: 9, letterSpacing: 3, marginBottom: 8 },
+  hint:           { color: '#40AAFF88', fontSize: 12, marginBottom: 4, fontStyle: 'italic' },
+
+  planetBox:      { marginHorizontal: 20, padding: 16, backgroundColor: '#000A22',
+                    borderRadius: 12, borderWidth: 1, borderColor: '#40AAFF55' },
+  planetName:     { color: '#40AAFF', fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
+  planetDesc:     { color: '#ccc', fontSize: 13, lineHeight: 20, marginBottom: 8 },
+  planetStat:     { color: '#00FF9F', fontSize: 12 },
 });
