@@ -2,7 +2,7 @@
   "expo": {
     "name": "AVANT",
     "slug": "avant-ai",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -17,7 +17,7 @@
         "backgroundColor": "#050510"
       },
       "package": "com.bridgeline.avant",
-      "versionCode": 1,
+      "versionCode": 2,
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
@@ -34,26 +34,41 @@
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
         "android.permission.READ_PHONE_STATE",
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "plugins": [
-      "expo-camera",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "AVANT needs camera access for AR Vision mode."
+        }
+      ],
       "expo-av",
       "expo-contacts",
       "expo-calendar",
-      "expo-location",
-      "expo-notifications"
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "AVANT needs location for navigation and weather."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./src/assets/icon.png",
+          "color": "#40AAFF"
+        }
+      ]
     ],
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./src/assets/favicon.png"
     },
-    "platforms": [
-      "android",
-      "web"
-    ]
+    "platforms": ["android", "web"]
   }
 }
