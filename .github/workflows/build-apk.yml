@@ -39,6 +39,11 @@ jobs:
       - name: Install npm packages
         run: npm install --legacy-peer-deps
 
+      # Install the RN CLI explicitly — it's needed by react-native bundle
+      # but not listed in package.json devDependencies
+      - name: Install React Native CLI
+        run: npm install --no-save @react-native-community/cli@15
+
       - name: Patch kotlin version in gradle-plugin
         run: |
           TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
@@ -51,21 +56,25 @@ jobs:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
 
+      # Bundle all JS/TS into a single file and embed it in the APK.
+      # This is what makes the APK standalone — no Metro dev server needed.
+      # Without this step, the app shows "Unable to load script" on launch.
       - name: Bundle JavaScript into APK assets
         run: |
           mkdir -p android/app/src/main/assets
-          npx react-native bundle \
+          node_modules/.bin/react-native bundle \
             --platform android \
             --dev false \
             --entry-file index.js \
             --bundle-output android/app/src/main/assets/index.android.bundle \
             --assets-dest android/app/src/main/res \
             --reset-cache
+          echo "Bundle size: $(du -sh android/app/src/main/assets/index.android.bundle)"
         env:
           NODE_ENV: production
           NODE_OPTIONS: --no-experimental-fetch
 
-      - name: Generate debug keystore
+      - name: Generate debug keystore for signing
         run: |
           keytool -genkeypair -v \
             -keystore android/app/debug.keystore \
@@ -75,13 +84,12 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null || true
           ls -la android/app/debug.keystore
 
-      - name: Add signing config to app/build.gradle
+      - name: Add release signing config to app/build.gradle
         run: |
           python3 << 'PYEOF'
           with open('android/app/build.gradle', 'r') as f:
               content = f.read()
 
-          # Only add signingConfigs if not already present
           if 'signingConfigs' not in content:
               signing = (
                   "\n    signingConfigs {\n"
@@ -95,7 +103,6 @@ jobs:
               )
               content = content.replace('    buildTypes {', signing + '    buildTypes {')
 
-          # Apply signing config to release buildType
           if 'signingConfig signingConfigs.release' not in content:
               content = content.replace(
                   'buildTypes {\n        release {',
@@ -104,7 +111,7 @@ jobs:
 
           with open('android/app/build.gradle', 'w') as f:
               f.write(content)
-          print("Done")
+          print("Signing config applied")
           PYEOF
 
       - name: Make gradlew executable
@@ -112,15 +119,15 @@ jobs:
 
       - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --info 2>&1 | tail -100
+        run: ./gradlew assembleRelease --no-daemon
         env:
           GRADLE_OPTS: '-Xmx4g -XX:MaxMetaspaceSize=512m'
 
-      - name: Verify APK exists
+      - name: Verify APK
         run: |
           APK="android/app/build/outputs/apk/release/app-release.apk"
           ls -lh "$APK"
-          echo "APK size: $(du -sh $APK | cut -f1)"
+          echo "SUCCESS — APK size: $(du -sh $APK | cut -f1)"
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
