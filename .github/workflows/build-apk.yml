@@ -44,27 +44,15 @@ jobs:
       - name: Install npm packages
         run: npm install --legacy-peer-deps
 
-      # ── 6. ROOT CAUSE FIX ────────────────────────────────────
-      # Deep investigation revealed the actual source of Kotlin 1.9.24:
-      #
-      # @react-native/gradle-plugin (inside node_modules) ships its own
-      # gradle/libs.versions.toml with:  kotlin = "1.9.24"
-      # This file is used to compile the gradle-plugin subproject that is
-      # included directly in the Android build via settings.gradle.
-      # That compiled plugin loads kotlin-gradle-plugin 1.9.24 into the
-      # Gradle classpath — making 1.9.24 the ACTUAL compiler, regardless
-      # of what ext.kotlinVersion says.
-      #
-      # Compose Compiler 1.5.15 (in expo-modules-core 2.2.3) requires 1.9.25.
-      # Fix: patch libs.versions.toml before prebuild runs.
-      - name: Patch @react-native/gradle-plugin kotlin version 1.9.24 → 1.9.25
+      # ── 6. ROOT CAUSE FIX: patch @react-native/gradle-plugin ─
+      # @react-native/gradle-plugin ships libs.versions.toml with kotlin="1.9.24"
+      # That file controls the ACTUAL Kotlin compiler loaded into the Gradle classpath.
+      # Compose Compiler 1.5.15 (expo-modules-core 2.2.3) requires Kotlin 1.9.25.
+      - name: Patch @react-native/gradle-plugin kotlin 1.9.24 → 1.9.25
         run: |
           TOML="node_modules/@react-native/gradle-plugin/gradle/libs.versions.toml"
-          echo "=== Before patch ==="
-          cat "$TOML"
           sed -i 's/kotlin = "1\.9\.24"/kotlin = "1.9.25"/' "$TOML"
-          echo "=== After patch ==="
-          cat "$TOML"
+          echo "✅ Kotlin version in gradle-plugin: $(grep 'kotlin = ' $TOML)"
 
       # ── 7. Expo prebuild → generates /android folder ─────────
       - name: Expo prebuild (generate Android project)
@@ -73,32 +61,110 @@ jobs:
           EXPO_NO_GIT_STATUS: 1
           NODE_OPTIONS: --no-experimental-fetch
 
-      # ── 8. Make gradlew executable ────────────────────────────
+      # ── 8. Bundle JS into assets ─────────────────────────────
+      # THIS is the fix for the "Unable to load script" crash on device.
+      # A debug APK tries to connect to Metro bundler at runtime (dev server).
+      # For a standalone installable APK the JS bundle MUST be pre-built and
+      # embedded in the APK assets folder before Gradle runs.
+      - name: Bundle JavaScript (embed into APK assets)
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+        env:
+          NODE_ENV: production
+          NODE_OPTIONS: --no-experimental-fetch
+
+      # ── 9. Configure release signing with a debug keystore ───
+      # We use a generated debug keystore so the APK installs on any device
+      # without needing Play Store or a production signing certificate.
+      - name: Generate debug keystore for signing
+        run: |
+          keytool -genkeypair -v \
+            -keystore android/app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" 2>/dev/null
+          echo "✅ Keystore generated"
+
+      - name: Configure release signing in build.gradle
+        run: |
+          python3 - << 'PYEOF'
+          import re
+
+          with open('android/app/build.gradle', 'r') as f:
+              content = f.read()
+
+          signing_config = '''
+      signingConfigs {
+          release {
+              storeFile file('debug.keystore')
+              storePassword 'android'
+              keyAlias 'androiddebugkey'
+              keyPassword 'android'
+          }
+      }
+'''
+          # Insert signingConfigs before buildTypes
+          content = content.replace(
+              '    buildTypes {',
+              signing_config + '    buildTypes {'
+          )
+
+          # Make release build type use the signing config and disable shrinking
+          content = re.sub(
+              r'(release \{[^}]*)(})',
+              r'\1            signingConfig signingConfigs.release\n            shrinkResources false\n            minifyEnabled false\n        }',
+              content,
+              count=1,
+              flags=re.DOTALL
+          )
+
+          with open('android/app/build.gradle', 'w') as f:
+              f.write(content)
+
+          print("✅ Signing config injected into app/build.gradle")
+          PYEOF
+
+      # ── 10. Make gradlew executable ───────────────────────────
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      # ── 9. Build debug APK ────────────────────────────────────
-      - name: Build debug APK
+      # ── 11. Build RELEASE APK (JS bundle embedded, no Metro) ─
+      - name: Build release APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
         env:
           GRADLE_OPTS: '-Xmx4g -XX:MaxMetaspaceSize=512m'
 
-      # ── 10. Upload APK as artifact ────────────────────────────
+      # ── 12. Upload APK artifact ───────────────────────────────
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AVANT-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: AVANT-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      # ── 11. Done ──────────────────────────────────────────────
+      # ── 13. Done ─────────────────────────────────────────────
       - name: APK build complete
         run: |
-          echo "✅ AVANT APK built successfully"
-          echo ""
-          echo "To download:"
-          echo "  1. Go to https://github.com/BridgeLine-Services/AVANT-APP/actions"
-          echo "  2. Click the latest 'Build AVANT APK' run"
-          echo "  3. Scroll to 'Artifacts' → click 'AVANT-debug-apk' to download"
-          echo "  4. Unzip → install app-debug.apk on your Android phone"
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          if [ -f "$APK" ]; then
+            SIZE=$(du -sh "$APK" | cut -f1)
+            echo "✅ AVANT release APK built — size: $SIZE"
+            echo ""
+            echo "To install on your phone:"
+            echo "  1. Go to https://github.com/BridgeLine-Services/AVANT-APP/actions"
+            echo "  2. Click the latest 'Build AVANT APK' run"
+            echo "  3. Scroll to 'Artifacts' → click 'AVANT-release-apk'"
+            echo "  4. Unzip → transfer app-release.apk to phone → install"
+            echo "  (Enable 'Install from unknown sources' in Android settings)"
+          else
+            echo "❌ APK not found"
+            exit 1
+          fi
