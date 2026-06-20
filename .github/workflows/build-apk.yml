@@ -1,4 +1,4 @@
-name: Build AVANT APK
+name: Build AVANT APK  # v3 - release APK with embedded JS bundle
 
 on:
   push:
