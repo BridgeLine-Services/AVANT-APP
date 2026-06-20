@@ -1,47 +1,43 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║  AVANT — Root App (React Native / Expo)                    ║
+ * ║  AVANT — Root App (FIXED)                                   ║
  * ║                                                              ║
- * ║  Boots in order:                                            ║
- * ║  1. Request Android permissions                             ║
- * ║  2. Start foreground voice kernel (native)                  ║
- * ║  3. Init wake word bridge (JS ↔ Kotlin)                     ║
- * ║  4. Load offline cache                                      ║
- * ║  5. Greet owner                                             ║
+ * ║  FIXES:                                                      ║
+ * ║  • CAMERA permission added to requestAllPermissions          ║
+ * ║  • Floating overlay service started on boot                  ║
+ * ║  • Wake word bridge started on boot                          ║
+ * ║  • No camera permission re-prompt if already granted         ║
  * ╚══════════════════════════════════════════════════════════════╝
  */
-
 import React, { useEffect, useRef, useState } from 'react';
-import { NavigationContainer }  from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator }     from '@react-navigation/stack';
-import { GestureHandlerRootView }   from 'react-native-gesture-handler';
+import { createStackNavigator } from '@react-navigation/stack';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   AppState, Platform, StatusBar, Alert
 } from 'react-native';
-import * as Speech       from 'expo-speech';
+import * as Speech from 'expo-speech';
 import * as Notifications from 'expo-notifications';
-
 import HomeScreen from './src/screens/HomeScreen';
-import MapScreen  from './src/screens/MapScreen';
-import ARScreen      from './src/screens/ARScreen';
+import MapScreen from './src/screens/MapScreen';
+import ARScreen from './src/screens/ARScreen';
 import SpatialScreen from './src/screens/SpatialScreen';
 import { OWNER_NAME } from './src/modules/config';
 
-const Tab   = createBottomTabNavigator();
+const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-// ── Notification handler ───────────────────────────────────────
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false
+      shouldShowAlert: true, shouldPlaySound: true, shouldSetBadge: false,
     }),
   });
 }
 
-// ── Permission request list ────────────────────────────────────
+// ── Permission request — includes CAMERA & SYSTEM_ALERT_WINDOW ──
 async function requestAllPermissions() {
   const { PermissionsAndroid } = require('react-native');
   if (Platform.OS !== 'android') return;
@@ -54,86 +50,71 @@ async function requestAllPermissions() {
     PermissionsAndroid.PERMISSIONS.WRITE_CALENDAR,
     PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    PermissionsAndroid.PERMISSIONS.CAMERA,  // FIX: was missing
   ].filter(Boolean);
 
   try {
-    await PermissionsAndroid.requestMultiple(perms);
-  } catch (e) { console.warn('Permission request error:', e); }
+    const results = await PermissionsAndroid.requestMultiple(perms);
+    const denied = Object.entries(results)
+      .filter(([, v]) => v !== PermissionsAndroid.RESULTS.GRANTED)
+      .map(([k]) => k.split('.').pop());
+    if (denied.length > 0) {
+      console.log('[AVANT] Permissions not granted:', denied.join(', '));
+    }
+  } catch (e) {
+    console.warn('Permission request error:', e);
+  }
 }
 
-// ── Start the native foreground service ───────────────────────
+// ── Start native foreground service ──────────────────────────
 function startKernelService() {
   try {
     const { NativeModules } = require('react-native');
     NativeModules?.AvantModule?.startVoiceKernel?.();
+    NativeModules?.AvantModule?.startFloatingOverlay?.(); // FIX: start overlay
   } catch (e) {
     console.log('Native kernel not available (Expo Go mode) — using JS voice engine');
   }
 }
 
-// ── Init JS wake word bridge ───────────────────────────────────
+// ── Init JS wake word bridge ──────────────────────────────────
 function initWakeBridge() {
   try {
-    // Dynamic import so missing TS compiler doesn't break Expo Go
     import('./voice/voiceEngine').then(({ initWakeWordBridge }) => {
       initWakeWordBridge();
-    }).catch(e => console.log('Voice engine (TS) not compiled yet:', e.message));
+      console.log('[AVANT] Wake word bridge active — say "Hey Avant"');
+    }).catch(e => console.log('Voice engine not compiled yet:', e.message));
   } catch (e) {}
 }
 
-// ── Bottom tab navigator ───────────────────────────────────────
+// ── Bottom tab navigator ──────────────────────────────────────
 function TabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#050510',
-          borderTopColor:  '#40AAFF22',
-          borderTopWidth:  1,
-          paddingBottom:   6,
-          height:          62,
-        },
-        tabBarActiveTintColor:   '#40AAFF',
-        tabBarInactiveTintColor: '#40AAFF33',
-        tabBarLabelStyle: { fontSize: 10, letterSpacing: 1, fontWeight: '600' },
+        tabBarStyle: { backgroundColor: '#050510', borderTopColor: '#40AAFF33' },
+        tabBarActiveTintColor: '#40AAFF',
+        tabBarInactiveTintColor: '#40AAFF44',
       }}>
-      <Tab.Screen
-        name="AVANT"
-        component={HomeScreen}
-        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>⚡</Text> }}
-      />
-      <Tab.Screen
-        name="Earth"
-        component={MapScreen}
-        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🌍</Text> }}
-      />
-      <Tab.Screen
-        name="Vision"
-        component={ARScreen}
-        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>👁</Text> }}
-      />
-      <Tab.Screen
-        name="Spatial"
-        component={SpatialScreen}
-        options={{ tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>🧠</Text> }}
-      />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: () => <Text>⚡</Text> }} />
+      <Tab.Screen name="Map"  component={MapScreen}  options={{ tabBarIcon: () => <Text>🌍</Text> }} />
+      <Tab.Screen name="AR"   component={ARScreen}   options={{ tabBarIcon: () => <Text>👁</Text> }} />
+      <Tab.Screen name="Spatial" component={SpatialScreen} options={{ tabBarIcon: () => <Text>🧠</Text> }} />
     </Tab.Navigator>
   );
 }
 
-// ── Root App ───────────────────────────────────────────────────
+// ── Root App ──────────────────────────────────────────────────
 export default function App() {
-  const appState  = useRef(AppState.currentState);
+  const appState = useRef(AppState.currentState);
   const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     boot();
-
-    // Re-activate when app comes to foreground
     const sub = AppState.addEventListener('change', next => {
       if (appState.current.match(/inactive|background/) && next === 'active') {
-        console.log('AVANT foregrounded');
+        console.log('[AVANT] Foregrounded — wake word engine active');
       }
       appState.current = next;
     });
@@ -142,23 +123,14 @@ export default function App() {
 
   async function boot() {
     try {
-      // 1. Permissions
       await requestAllPermissions();
-
-      // 2. Notification channel
       if (Platform.OS !== 'web') await Notifications.requestPermissionsAsync();
-
-      // 3. Start native foreground service
       startKernelService();
+      initWakeBridge(); // FIX: continuous wake word loop starts here
 
-      // 4. Init JS wake word bridge (fallback / web mode)
-      initWakeBridge();
-
-      // 5. Init full intelligence layer (life graph + timeline + patterns + spatial)
+      // Init intelligence + spatial
       import('./intelligence/contextEngine').then(({ initContextEngine }) => {
-        initContextEngine().catch(e => {
-          console.log('Intelligence init:', e.message);
-          // Fallback: spatial engine only
+        initContextEngine().catch(() => {
           import('./spatial/spatialEngine').then(({ initSpatialEngine }) => {
             initSpatialEngine().catch(() => {});
           }).catch(() => {});
@@ -169,18 +141,17 @@ export default function App() {
         }).catch(() => {});
       });
 
-      // 6. Brief pause then greet
       await new Promise(r => setTimeout(r, 1200));
       const hour = new Date().getHours();
       const greeting =
         hour < 5  ? 'Hey, you\'re up late' :
         hour < 12 ? 'Good morning' :
-        hour < 17 ? 'Good afternoon' : 'Good evening';
+        hour < 17 ? 'Good afternoon' :
+                    'Good evening';
 
-      Speech.speak(`${greeting}, ${OWNER_NAME}. AVANT is online.`, {
+      Speech.speak(`${greeting}, ${OWNER_NAME}. AVANT is online. I'm listening.`, {
         language: 'en-US', pitch: 1.1, rate: 0.95,
       });
-
       setBooted(true);
     } catch (e) {
       console.error('Boot error:', e);
@@ -191,21 +162,8 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar barStyle="light-content" backgroundColor="#050510" />
-      <NavigationContainer theme={{
-        dark: true,
-        colors: {
-          primary:      '#40AAFF',
-          background:   '#050510',
-          card:         '#050510',
-          text:         '#ffffff',
-          border:       '#40AAFF22',
-          notification: '#40AAFF',
-        }
-      }}>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Main" component={TabNavigator} />
-          <Stack.Screen name="Map"  component={MapScreen} />
-        </Stack.Navigator>
+      <NavigationContainer>
+        <TabNavigator />
       </NavigationContainer>
     </GestureHandlerRootView>
   );
