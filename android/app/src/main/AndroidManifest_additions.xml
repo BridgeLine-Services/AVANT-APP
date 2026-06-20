@@ -1,0 +1,41 @@
+<!-- ══════════════════════════════════════════════════════════
+     AVANT AndroidManifest additions
+     
+     FIXES:
+     • SYSTEM_ALERT_WINDOW — floating overlay permission
+     • FOREGROUND_SERVICE_MICROPHONE — required Android 14+
+     • AvantForegroundService declared with microphone type
+     • AvantBootReceiver for auto-start on reboot/restart
+     • CAMERA permission explicit
+     
+     Merge these into your android/app/src/main/AndroidManifest.xml
+     ══════════════════════════════════════════════════════════ -->
+
+<!-- ADD inside <manifest> tag (alongside existing permissions): -->
+<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.VIBRATE" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.INTERNET" />
+
+<!-- ADD inside <application> tag: -->
+<service
+    android:name="com.avant.AvantForegroundService"
+    android:enabled="true"
+    android:exported="false"
+    android:foregroundServiceType="microphone"
+    android:stopWithTask="false" />
+
+<receiver
+    android:name="com.avant.AvantBootReceiver"
+    android:enabled="true"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="com.avant.restart" />
+    </intent-filter>
+</receiver>
